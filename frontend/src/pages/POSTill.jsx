@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Layout from '../components/Layout';
 import {
   addItem,
   removeItem,
@@ -202,11 +201,11 @@ const POSTill = () => {
       toast.error('Cart is empty');
       return;
     }
-    if (!cart.customer) {
-      toast.error('Please add a customer first');
-      setShowCustomerModal(true);
-      return;
-    }
+   // if (!cart.customer) {
+     // toast.error('Please add a customer first');
+     // setShowCustomerModal(true);
+     // return;
+    //}
     setShowPaymentModal(true);
   };
 
@@ -218,17 +217,12 @@ const POSTill = () => {
       return;
     }
 
-    if (!cart.customer) {
-      toast.error('Customer is required');
-      return;
-    }
-
     setProcessing(true);
 
     try {
       // Backend only needs productId and quantity - it fetches price from database
       const transactionData = {
-        customerId: cart.customer.id,
+        customerId: cart.customer?.id || null, // Optional customer - supports walk-in
         items: cart.items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -242,7 +236,8 @@ const POSTill = () => {
         transactionData.discount = cart.discount;
       }
       
-      if (cart.loyaltyPointsToRedeem && cart.loyaltyPointsToRedeem > 0) {
+      // Only redeem points if customer exists
+      if (cart.customer && cart.loyaltyPointsToRedeem && cart.loyaltyPointsToRedeem > 0) {
         transactionData.loyaltyPointsRedeemed = cart.loyaltyPointsToRedeem;
       }
 
@@ -290,12 +285,11 @@ const POSTill = () => {
   const change = parseFloat(amountPaid || 0) - cart.total;
 
   return (
-    <Layout>
-      <div className="h-[calc(100vh-4rem)] flex gap-4">
-        {/* Left Side - Products */}
-        <div className="flex-1 flex flex-col">
-          {/* Search and Barcode */}
-          <div className="card mb-4">
+    <div className="h-screen flex gap-4 bg-gray-100 p-6">
+      {/* Left Side - Products */}
+      <div className="flex-1 flex flex-col">
+        {/* Search and Barcode */}
+        <div className="card mb-4">
             <div className="grid grid-cols-2 gap-4">
               <form onSubmit={handleBarcodeSearch} className="flex gap-2">
                 <div className="flex-1 relative">
@@ -400,6 +394,10 @@ const POSTill = () => {
               <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 mb-4">
                 <div className="flex justify-between items-start">
                   <div>
+                    <div className="flex items-center gap-1 mb-1">
+                      <User className="w-4 h-4 text-primary-600" />
+                      <span className="text-xs font-medium text-primary-600">CUSTOMER</span>
+                    </div>
                     <p className="font-semibold text-gray-800">
                       {cart.customer.name || `${cart.customer.firstName || ''} ${cart.customer.lastName || ''}`.trim() || 'Customer'}
                     </p>
@@ -411,19 +409,28 @@ const POSTill = () => {
                   <button
                     onClick={handleRemoveCustomer}
                     className="text-red-600 hover:text-red-700"
+                    title="Remove customer"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
             ) : (
-              <button
-                onClick={() => setShowCustomerModal(true)}
-                className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-3 mb-4 hover:bg-gray-200 transition-colors"
-              >
-                <User className="w-5 h-5 mx-auto mb-1 text-gray-400" />
-                <p className="text-sm text-gray-600">Add Customer</p>
-              </button>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-1 mb-1">
+                  <User className="w-4 h-4 text-gray-500" />
+                  <span className="text-xs font-medium text-gray-500">CUSTOMER</span>
+                </div>
+                <p className="font-medium text-gray-700 mb-1">Walk-in Customer</p>
+                <p className="text-xs text-gray-500 mb-2">No loyalty points</p>
+                <button
+                  onClick={() => setShowCustomerModal(true)}
+                  className="w-full bg-blue-600 text-white text-sm py-2 px-3 rounded hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Customer
+                </button>
+              </div>
             )}
 
             {/* Cart Items */}
@@ -562,7 +569,6 @@ const POSTill = () => {
             </button>
           </div>
         </div>
-      </div>
 
       {/* Customer Modal */}
       {showCustomerModal && (
@@ -737,7 +743,7 @@ const POSTill = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </div>
   );
 };
 

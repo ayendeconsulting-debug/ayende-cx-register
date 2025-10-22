@@ -1,15 +1,20 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Provider } from 'react-redux';
-import { Toaster } from 'react-hot-toast';
-import store from './store/store';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import POSTill from './pages/POSTill';
-import Products from './pages/Products';
-import Customers from './pages/Customers';
-import Transactions from './pages/Transactions';
-import Reports from './pages/Reports';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import { Provider } from "react-redux";
+import { Toaster } from "react-hot-toast";
+import store from "./store/store";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import POSTill from "./pages/POSTill";
+import Products from "./pages/Products";
+import Customers from "./pages/Customers";
+import Transactions from "./pages/Transactions";
+import Reports from "./pages/Reports";
 
 function App() {
   return (

@@ -13,21 +13,27 @@ const generateTransactionNumber = async () => {
   const today = new Date();
   const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
   
-  // Get count of transactions today
-  const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-  const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-  
-  const todayCount = await prisma.transaction.count({
+  // Find the last transaction with today's date prefix to get the next sequence number
+  const lastTransaction = await prisma.transaction.findFirst({
     where: {
-      createdAt: {
-        gte: startOfDay,
-        lte: endOfDay,
+      transactionNumber: {
+        startsWith: `TXN-${dateStr}`,
       },
+    },
+    orderBy: {
+      transactionNumber: 'desc',
     },
   });
   
-  const sequence = String(todayCount + 1).padStart(3, '0');
-  return `TXN-${dateStr}-${sequence}`;
+  let sequence = 1;
+  if (lastTransaction) {
+    // Extract the sequence number from the last transaction
+    const lastSequence = parseInt(lastTransaction.transactionNumber.split('-')[2]);
+    sequence = lastSequence + 1;
+  }
+  
+  const sequenceStr = String(sequence).padStart(3, '0');
+  return `TXN-${dateStr}-${sequenceStr}`;
 };
 
 /**
