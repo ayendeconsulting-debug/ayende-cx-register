@@ -14,6 +14,7 @@ import {
   X,
   Scan,
 } from 'lucide-react';
+import QuickActions from '../components/QuickActions';
 
 const Products = () => {
   const { user } = useSelector((state) => state.auth);
@@ -604,6 +605,9 @@ const Products = () => {
           </div>
         </div>
       )}
+
+      <QuickActions />
+      
       </div>
   );
 };

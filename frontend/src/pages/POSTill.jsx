@@ -222,7 +222,6 @@ const POSTill = () => {
     try {
       // Backend only needs productId and quantity - it fetches price from database
       const transactionData = {
-        customerId: cart.customer?.id || null, // Optional customer - supports walk-in
         items: cart.items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -231,9 +230,14 @@ const POSTill = () => {
         amountPaid: parseFloat(paid),
       };
 
+      // Only add customerId if customer exists (support walk-in)
+      if (cart.customer?.id) {
+        transactionData.customerId = cart.customer.id;
+      }
+
       // Only add optional fields if they have values
       if (cart.discount && cart.discount > 0) {
-        transactionData.discount = cart.discount;
+        transactionData.discountAmount = cart.discount;
       }
       
       // Only redeem points if customer exists

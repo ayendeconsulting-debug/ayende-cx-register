@@ -22,6 +22,8 @@ import toast from 'react-hot-toast';
 import customerService from '../services/customerService';
 import { useDispatch } from 'react-redux';
 import { setCustomer } from '../store/slices/cartSlice';
+import QuickActions from '../components/QuickActions';
+
 
 const Customers = () => {
   const navigate = useNavigate();
@@ -856,6 +858,9 @@ const Customers = () => {
           </div>
         </div>
       )}
+
+      <QuickActions />
+      
     </div>
   );
 };

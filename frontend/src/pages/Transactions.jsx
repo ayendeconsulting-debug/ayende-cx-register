@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import transactionService from '../services/transactionService';
+import QuickActions from '../components/QuickActions';
+
 
 const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
@@ -853,6 +855,9 @@ const Transactions = () => {
           </div>
         </div>
       )}
+
+      <QuickActions />
+      
     </div>
   );
 };
