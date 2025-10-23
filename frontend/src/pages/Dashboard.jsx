@@ -1,796 +1,767 @@
-import { useState, useEffect, useRef } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useState, useEffect } from 'react';
+import { 
+  BarChart3, 
+  TrendingUp, 
+  DollarSign, 
+  Users, 
+  ShoppingBag, 
+  Package,
+  AlertTriangle,
+  Receipt,
+  Calendar,
+  ArrowUp,
+  ArrowDown,
+  ShoppingCart,
+  Activity,
+  CreditCard
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import {
-  addItem,
-  removeItem,
-  updateQuantity,
-  setCustomer,
-  removeCustomer,
-  setDiscount,
-  setLoyaltyPointsToRedeem,
-  clearCart,
-} from '../store/slices/cartSlice';
+import transactionService from '../services/transactionService';
 import productService from '../services/productService';
 import customerService from '../services/customerService';
-import transactionService from '../services/transactionService';
-import toast from 'react-hot-toast';
-import {
-  Search,
-  Scan,
-  User,
-  X,
-  Plus,
-  Minus,
-  Trash2,
-  DollarSign,
-  CreditCard,
-  Smartphone,
-  Building2,
-  Receipt,
-  ShoppingCart,
-  BarChart3,
-  Package,
-  Users,
-} from 'lucide-react';
+import ShiftControl from '../components/ShiftControl';
 
-const POSTill = () => {
-  const dispatch = useDispatch();
+const Dashboard = () => {
   const navigate = useNavigate();
-  const cart = useSelector((state) => state.cart);
-  const { user } = useSelector((state) => state.auth);
-
-  // State
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [amountPaid, setAmountPaid] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [lastTransaction, setLastTransaction] = useState(null);
-  const [discountAmount, setDiscountAmount] = useState('');
-  const [loyaltyPointsInput, setLoyaltyPointsInput] = useState('');
-
-  const barcodeInputRef = useRef(null);
-
-  // Load products and categories on mount
-  useEffect(() => {
-    loadProducts();
-    loadCategories();
-  }, []);
-
-  // Focus barcode input on mount
-  useEffect(() => {
-    if (barcodeInputRef.current) {
-      barcodeInputRef.current.focus();
-    }
-  }, []);
-
-  const loadProducts = async () => {
-    try {
-      const response = await productService.getAllProducts();
-      if (response.success) {
-        console.log('Loaded products:', response.data); // Debug log
-        setProducts(response.data);
-      }
-    } catch (error) {
-      console.error('Failed to load products:', error);
-      toast.error('Failed to load products');
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const response = await productService.getAllCategories();
-      if (response.success) {
-        setCategories(response.data);
-      }
-    } catch (error) {
-      toast.error('Failed to load categories');
-    }
-  };
-
-  const handleBarcodeSearch = async (e) => {
-    e.preventDefault();
-    if (!barcodeInput.trim()) return;
-
-    try {
-      const response = await productService.getProductByBarcode(barcodeInput);
-      if (response.success) {
-        const productWithPrice = {
-          ...response.data,
-          price: parseFloat(response.data.price || 0)
-        };
-        dispatch(addItem(productWithPrice));
-        toast.success(`Added ${response.data.name}`);
-        setBarcodeInput('');
-      }
-    } catch (error) {
-      toast.error('Product not found');
-      setBarcodeInput('');
-    }
-  };
-
-  const handleAddProduct = (product) => {
-    console.log('Adding product:', product); // Debug log
-    // Ensure price is a number
-    const productWithPrice = {
-      ...product,
-      id: product.id || product.productId, // Handle different id field names
-      price: parseFloat(product.price || 0)
-    };
-    dispatch(addItem(productWithPrice));
-    toast.success(`Added ${product.name}`);
-  };
-
-  const handleCustomerLookup = async () => {
-    if (!customerPhone.trim()) {
-      toast.error('Please enter phone number');
-      return;
-    }
-
-    try {
-      const response = await customerService.searchCustomerByPhone(customerPhone);
-      console.log('Customer search response:', response); // Debug log
-      
-      if (response.success) {
-        // Backend returns an array of customers, take the first one
-        const customers = response.data;
-        
-        if (!customers || customers.length === 0) {
-          toast.error('Customer not found');
-          return;
-        }
-        
-        const customerData = customers[0]; // Take first matching customer
-        console.log('Selected customer:', customerData); // Debug log
-        
-        // Ensure customer has a name property
-        const customer = {
-          ...customerData,
-          name: customerData.name || `${customerData.firstName} ${customerData.lastName}`.trim(),
-        };
-        
-        dispatch(setCustomer(customer));
-        toast.success(`Customer: ${customer.name}`);
-        setShowCustomerModal(false);
-        setCustomerPhone('');
-      }
-    } catch (error) {
-      console.error('Customer lookup error:', error);
-      toast.error(error.response?.data?.message || 'Customer not found');
-    }
-  };
-
-  const handleRemoveCustomer = () => {
-    dispatch(removeCustomer());
-    toast.success('Customer removed');
-  };
-
-  const handleApplyDiscount = () => {
-    const discount = parseFloat(discountAmount) || 0;
-    if (discount < 0) {
-      toast.error('Discount cannot be negative');
-      return;
-    }
-    dispatch(setDiscount(discount));
-    toast.success(`Discount applied: $${discount.toFixed(2)}`);
-  };
-
-  const handleApplyLoyaltyPoints = () => {
-    const points = parseInt(loyaltyPointsInput) || 0;
-    if (points < 0) {
-      toast.error('Points cannot be negative');
-      return;
-    }
-    if (!cart.customer) {
-      toast.error('Please add a customer first');
-      return;
-    }
-    if (points > cart.customer.loyaltyPoints) {
-      toast.error('Not enough loyalty points');
-      return;
-    }
-    dispatch(setLoyaltyPointsToRedeem(points));
-    toast.success(`Redeeming ${points} points`);
-  };
-
-  const handleCheckout = () => {
-    if (cart.items.length === 0) {
-      toast.error('Cart is empty');
-      return;
-    }
-   // if (!cart.customer) {
-     // toast.error('Please add a customer first');
-     // setShowCustomerModal(true);
-     // return;
-    //}
-    setShowPaymentModal(true);
-  };
-
-  const handleCompletePayment = async () => {
-    const paid = parseFloat(amountPaid) || 0;
-
-    if (paid < cart.total) {
-      toast.error('Insufficient payment amount');
-      return;
-    }
-
-    setProcessing(true);
-
-    try {
-      // Backend only needs productId and quantity - it fetches price from database
-      const transactionData = {
-        items: cart.items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
-        paymentMethod: paymentMethod,
-        amountPaid: parseFloat(paid),
-      };
-
-      // Only add customerId if customer exists (support walk-in)
-      if (cart.customer?.id) {
-        transactionData.customerId = cart.customer.id;
-      }
-
-      // Only add optional fields if they have values
-      if (cart.discount && cart.discount > 0) {
-        transactionData.discountAmount = cart.discount;
-      }
-      
-      // Only redeem points if customer exists
-      if (cart.customer && cart.loyaltyPointsToRedeem && cart.loyaltyPointsToRedeem > 0) {
-        transactionData.loyaltyPointsRedeemed = cart.loyaltyPointsToRedeem;
-      }
-
-      console.log('Sending transaction:', JSON.stringify(transactionData, null, 2));
-
-      const response = await transactionService.createTransaction(transactionData);
-
-      if (response.success) {
-        setLastTransaction(response.data);
-        toast.success('Transaction completed!');
-        dispatch(clearCart());
-        setShowPaymentModal(false);
-        setShowReceiptModal(true);
-        setAmountPaid('');
-        setDiscountAmount('');
-        setLoyaltyPointsInput('');
-
-        // Reload products to update stock
-        loadProducts();
-      }
-    } catch (error) {
-      console.error('Full transaction error:', error);
-      console.error('Error response:', error.response);
-      const errorMsg = error.response?.data?.message || error.message || 'Transaction failed';
-      toast.error(errorMsg);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleNewSale = () => {
-    setShowReceiptModal(false);
-    setLastTransaction(null);
-  };
-
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory = !selectedCategory || product.categoryId === selectedCategory;
-    const matchesSearch =
-      !searchQuery ||
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch && product.stockQuantity > 0;
+  const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState('today'); // today, week, month, year
+  const [dashboardData, setDashboardData] = useState({
+    salesMetrics: {
+      todaySales: 0,
+      weekSales: 0,
+      monthSales: 0,
+      todayTransactions: 0,
+      weekTransactions: 0,
+      monthTransactions: 0,
+      averageTransaction: 0,
+      yesterdaySales: 0,
+      lastWeekSales: 0,
+      lastMonthSales: 0
+    },
+    recentTransactions: [],
+    topProducts: [],
+    lowStockProducts: [],
+    customerStats: {
+      total: 0,
+      newThisMonth: 0,
+      activeCustomers: 0
+    },
+    salesTrend: [],
+    paymentMethodBreakdown: []
   });
 
-  const change = parseFloat(amountPaid || 0) - cart.total;
+  useEffect(() => {
+    fetchDashboardData();
+    
+    // Auto-refresh every 5 minutes
+    const intervalId = setInterval(() => {
+      fetchDashboardData();
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    // Cleanup on unmount
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Calculate date ranges
+      const now = new Date();
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      // Fetch all data in parallel
+      const [
+        allTransactions,
+        allProducts,
+        allCustomers
+      ] = await Promise.all([
+        transactionService.getAllTransactions({ limit: 1000 }),
+        productService.getAllProducts(),
+        customerService.getAllCustomers()
+      ]);
+
+      const transactions = allTransactions.data || [];
+      const products = allProducts.data || [];
+      const customers = allCustomers.data || [];
+
+      // Filter completed transactions only
+      const completedTransactions = transactions.filter(t => t.status === 'COMPLETED');
+
+      // Calculate sales metrics
+      const todayTxns = completedTransactions.filter(t => new Date(t.createdAt) >= today);
+      const weekTxns = completedTransactions.filter(t => new Date(t.createdAt) >= weekAgo);
+      const monthTxns = completedTransactions.filter(t => new Date(t.createdAt) >= monthAgo);
+
+      const todaySales = todayTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+      const weekSales = weekTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+      const monthSales = monthTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+
+      // Calculate previous period metrics for growth comparison
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+      const twoWeeksAgo = new Date(weekAgo.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const twoMonthsAgo = new Date(monthAgo.getFullYear(), monthAgo.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(monthAgo.getTime() - 1);
+
+      const yesterdayTxns = completedTransactions.filter(t => {
+        const txnDate = new Date(t.createdAt);
+        return txnDate >= yesterday && txnDate < today;
+      });
+      const lastWeekTxns = completedTransactions.filter(t => {
+        const txnDate = new Date(t.createdAt);
+        return txnDate >= twoWeeksAgo && txnDate < weekAgo;
+      });
+      const lastMonthTxns = completedTransactions.filter(t => {
+        const txnDate = new Date(t.createdAt);
+        return txnDate >= twoMonthsAgo && txnDate < monthAgo;
+      });
+
+      const yesterdaySales = yesterdayTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+      const lastWeekSales = lastWeekTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+      const lastMonthSales = lastMonthTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+
+      // Calculate payment method breakdown
+      const paymentMethods = {};
+      completedTransactions.forEach(txn => {
+        const method = txn.paymentDetails?.[0]?.paymentMethod || 'CASH';
+        if (!paymentMethods[method]) {
+          paymentMethods[method] = {
+            method,
+            count: 0,
+            total: 0
+          };
+        }
+        paymentMethods[method].count += 1;
+        paymentMethods[method].total += parseFloat(txn.total || 0);
+      });
+
+      const totalRevenue = completedTransactions.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+      const paymentMethodBreakdown = Object.values(paymentMethods)
+        .map(pm => ({
+          ...pm,
+          percentage: totalRevenue > 0 ? (pm.total / totalRevenue) * 100 : 0
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      // Calculate average transaction
+      const avgTransaction = completedTransactions.length > 0
+        ? completedTransactions.reduce((sum, t) => sum + parseFloat(t.total || 0), 0) / completedTransactions.length
+        : 0;
+
+      // Get recent transactions (last 5)
+      const recentTransactions = [...completedTransactions]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 5);
+
+      // Calculate top products by quantity sold
+      const productSales = {};
+      completedTransactions.forEach(txn => {
+        txn.items?.forEach(item => {
+          const productId = item.productId || item.product?.id;
+          const productName = item.productName || item.product?.name || 'Unknown';
+          
+          if (!productSales[productId]) {
+            productSales[productId] = {
+              id: productId,
+              name: productName,
+              quantitySold: 0,
+              revenue: 0
+            };
+          }
+          
+          productSales[productId].quantitySold += item.quantity || 0;
+          productSales[productId].revenue += parseFloat(item.total || 0);
+        });
+      });
+
+      const topProducts = Object.values(productSales)
+        .sort((a, b) => b.quantitySold - a.quantitySold)
+        .slice(0, 5);
+
+      // Get low stock products
+      const lowStockProducts = products
+        .filter(p => p.stockQuantity <= p.lowStockAlert && p.isActive)
+        .sort((a, b) => a.stockQuantity - b.stockQuantity)
+        .slice(0, 5);
+
+      // Customer statistics
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const newCustomersThisMonth = customers.filter(c => 
+        new Date(c.createdAt) >= monthStart
+      ).length;
+
+      const activeCustomers = customers.filter(c => 
+        c.lastVisit && new Date(c.lastVisit) >= monthAgo
+      ).length;
+
+      // Generate sales trend for last 7 days
+      const salesTrend = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+        const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+        
+        const dayTxns = completedTransactions.filter(t => {
+          const txnDate = new Date(t.createdAt);
+          return txnDate >= date && txnDate < nextDate;
+        });
+
+        const daySales = dayTxns.reduce((sum, t) => sum + parseFloat(t.total || 0), 0);
+        
+        salesTrend.push({
+          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          sales: daySales,
+          transactions: dayTxns.length
+        });
+      }
+
+      setDashboardData({
+        salesMetrics: {
+          todaySales,
+          weekSales,
+          monthSales,
+          todayTransactions: todayTxns.length,
+          weekTransactions: weekTxns.length,
+          monthTransactions: monthTxns.length,
+          averageTransaction: avgTransaction,
+          yesterdaySales,
+          lastWeekSales,
+          lastMonthSales
+        },
+        recentTransactions,
+        topProducts,
+        lowStockProducts,
+        customerStats: {
+          total: customers.length,
+          newThisMonth: newCustomersThisMonth,
+          activeCustomers
+        },
+        salesTrend,
+        paymentMethodBreakdown
+      });
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(parseFloat(amount) || 0);
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const calculateGrowth = (current, previous) => {
+    if (previous === 0) {
+      return current > 0 ? 100 : 0;
+    }
+    return ((current - previous) / previous) * 100;
+  };
+
+  const getPaymentMethodLabel = (method) => {
+    const labels = {
+      'CASH': 'Cash',
+      'CARD': 'Card',
+      'MOBILE_MONEY': 'Mobile Money',
+      'BANK_TRANSFER': 'Bank Transfer'
+    };
+    return labels[method] || method;
+  };
+
+  const getPaymentMethodColor = (method) => {
+    const colors = {
+      'CASH': 'bg-green-500',
+      'CARD': 'bg-blue-500',
+      'MOBILE_MONEY': 'bg-purple-500',
+      'BANK_TRANSFER': 'bg-orange-500'
+    };
+    return colors[method] || 'bg-gray-500';
+  };
+
+  const getMetricByRange = () => {
+    switch(dateRange) {
+      case 'today':
+        return {
+          sales: dashboardData.salesMetrics.todaySales,
+          transactions: dashboardData.salesMetrics.todayTransactions,
+          label: 'Today',
+          previousSales: dashboardData.salesMetrics.yesterdaySales,
+          previousLabel: 'vs Yesterday'
+        };
+      case 'week':
+        return {
+          sales: dashboardData.salesMetrics.weekSales,
+          transactions: dashboardData.salesMetrics.weekTransactions,
+          label: 'This Week',
+          previousSales: dashboardData.salesMetrics.lastWeekSales,
+          previousLabel: 'vs Last Week'
+        };
+      case 'month':
+        return {
+          sales: dashboardData.salesMetrics.monthSales,
+          transactions: dashboardData.salesMetrics.monthTransactions,
+          label: 'This Month',
+          previousSales: dashboardData.salesMetrics.lastMonthSales,
+          previousLabel: 'vs Last Month'
+        };
+      default:
+        return {
+          sales: dashboardData.salesMetrics.todaySales,
+          transactions: dashboardData.salesMetrics.todayTransactions,
+          label: 'Today',
+          previousSales: dashboardData.salesMetrics.yesterdaySales,
+          previousLabel: 'vs Yesterday'
+        };
+    }
+  };
+
+  const currentMetric = getMetricByRange();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Activity className="w-16 h-16 text-blue-600 animate-pulse mx-auto mb-4" />
+          <div className="text-lg text-gray-600">Loading dashboard...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate max value for chart scaling
+  const maxSales = Math.max(...dashboardData.salesTrend.map(d => d.sales), 1);
 
   return (
-    <div className="h-screen flex gap-4 bg-gray-100 p-6">
-      {/* Left Side - Products */}
-      <div className="flex-1 flex flex-col">
-        {/* Search and Barcode */}
-        <div className="card mb-4">
-            <div className="grid grid-cols-2 gap-4">
-              <form onSubmit={handleBarcodeSearch} className="flex gap-2">
-                <div className="flex-1 relative">
-                  <Scan className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    ref={barcodeInputRef}
-                    type="text"
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    placeholder="Scan or enter barcode"
-                    className="input-field pl-10"
-                  />
-                </div>
-                <button type="submit" className="btn-primary">
-                  Add
-                </button>
-              </form>
-
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search products"
-                  className="input-field pl-10"
-                />
-              </div>
-            </div>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+              <BarChart3 className="w-8 h-8" />
+              Dashboard
+            </h1>
+            <p className="text-gray-600 mt-1">Welcome back! Here's what's happening with your business.</p>
           </div>
-
-          {/* Categories */}
-          <div className="flex gap-2 mb-4 overflow-x-auto">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                !selectedCategory
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              All
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
-                className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                  selectedCategory === category.id
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {category.name}
-              </button>
-            ))}
+          <div className="text-xs text-gray-500 flex items-center gap-2">
+            <Activity className="w-4 h-4 animate-pulse text-green-500" />
+            Auto-refresh every 5 min
           </div>
+        </div>
+      </div>
 
-          {/* Product Grid */}
-          <div className="flex-1 overflow-auto">
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => handleAddProduct(product)}
-                  className="card hover:shadow-lg transition-shadow text-left"
-                >
-                  <h3 className="font-semibold text-gray-800 mb-1">{product.name}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{product.sku}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-bold text-primary-600">
-                      ${parseFloat(product.price || 0).toFixed(2)}
-                    </span>
-                    <span className="text-sm text-gray-500">Stock: {product.stockQuantity}</span>
-                  </div>
-                </button>
-              ))}
+      {/* Time Range Selector */}
+      <div className="mb-6 flex gap-2">
+        <button
+          onClick={() => setDateRange('today')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            dateRange === 'today'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          Today
+        </button>
+        <button
+          onClick={() => setDateRange('week')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            dateRange === 'week'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          This Week
+        </button>
+        <button
+          onClick={() => setDateRange('month')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            dateRange === 'month'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          This Month
+        </button>
+      </div>
+
+      {/* Shift Control */}
+      <div className="mb-6">
+        <ShiftControl />
+      </div>
+
+      {/* Main Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        {/* Sales Card */}
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
+          <div className="flex items-center justify-between mb-4">
+            <div className="bg-green-100 p-3 rounded-lg">
+              <DollarSign className="w-6 h-6 text-green-600" />
             </div>
+            <span className="text-xs font-medium text-gray-500">{currentMetric.label}</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-800 mb-1">
+            {formatCurrency(currentMetric.sales)}
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">Total Sales</p>
+            {currentMetric.previousSales !== undefined && (
+              <span className={`text-xs font-medium flex items-center gap-1 ${
+                calculateGrowth(currentMetric.sales, currentMetric.previousSales) >= 0
+                  ? 'text-green-600'
+                  : 'text-red-600'
+              }`}>
+                {calculateGrowth(currentMetric.sales, currentMetric.previousSales) >= 0 ? (
+                  <ArrowUp className="w-3 h-3" />
+                ) : (
+                  <ArrowDown className="w-3 h-3" />
+                )}
+                {Math.abs(calculateGrowth(currentMetric.sales, currentMetric.previousSales)).toFixed(1)}%
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Right Side - Cart */}
-        <div className="w-96 flex flex-col">
-          <div className="card flex-1 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <ShoppingCart className="w-6 h-6" />
-                Cart ({cart.items.length})
-              </h2>
-              {cart.items.length > 0 && (
-                <button
-                  onClick={() => dispatch(clearCart())}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              )}
+        {/* Transactions Card */}
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
+          <div className="flex items-center justify-between mb-4">
+            <div className="bg-blue-100 p-3 rounded-lg">
+              <Receipt className="w-6 h-6 text-blue-600" />
             </div>
+            <span className="text-xs font-medium text-gray-500">{currentMetric.label}</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-800 mb-1">
+            {currentMetric.transactions}
+          </div>
+          <p className="text-sm text-gray-600">Transactions</p>
+        </div>
 
-            {/* Customer Info */}
-            {cart.customer ? (
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 mb-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="flex items-center gap-1 mb-1">
-                      <User className="w-4 h-4 text-primary-600" />
-                      <span className="text-xs font-medium text-primary-600">CUSTOMER</span>
+        {/* Average Transaction */}
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
+          <div className="flex items-center justify-between mb-4">
+            <div className="bg-purple-100 p-3 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-purple-600" />
+            </div>
+            <span className="text-xs font-medium text-gray-500">Average</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-800 mb-1">
+            {formatCurrency(dashboardData.salesMetrics.averageTransaction)}
+          </div>
+          <p className="text-sm text-gray-600">Per Transaction</p>
+        </div>
+
+        {/* Customers Card */}
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
+          <div className="flex items-center justify-between mb-4">
+            <div className="bg-orange-100 p-3 rounded-lg">
+              <Users className="w-6 h-6 text-orange-600" />
+            </div>
+            <span className="text-xs font-medium text-green-600 flex items-center gap-1">
+              <ArrowUp className="w-3 h-3" />
+              {dashboardData.customerStats.newThisMonth}
+            </span>
+          </div>
+          <div className="text-2xl font-bold text-gray-800 mb-1">
+            {dashboardData.customerStats.total}
+          </div>
+          <p className="text-sm text-gray-600">Total Customers</p>
+        </div>
+      </div>
+
+      {/* Sales Trend Chart and Low Stock */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Sales Trend Chart */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Sales Trend (Last 7 Days)
+            </h2>
+            <button
+              onClick={fetchDashboardData}
+              className="text-sm text-blue-600 hover:text-blue-700"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {/* Simple Bar Chart */}
+          <div className="space-y-3">
+            {dashboardData.salesTrend.map((day, index) => (
+              <div key={index} className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-gray-700 w-16">{day.date}</span>
+                  <span className="text-gray-600">{day.transactions} txn</span>
+                  <span className="font-semibold text-gray-800 w-20 text-right">
+                    {formatCurrency(day.sales)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-gray-200 rounded-full h-6 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                      style={{ width: `${(day.sales / maxSales) * 100}%` }}
+                    >
+                      {day.sales > 0 && (
+                        <span className="text-xs font-medium text-white">
+                          ${day.sales.toFixed(0)}
+                        </span>
+                      )}
                     </div>
-                    <p className="font-semibold text-gray-800">
-                      {cart.customer.name || `${cart.customer.firstName || ''} ${cart.customer.lastName || ''}`.trim() || 'Customer'}
-                    </p>
-                    <p className="text-sm text-gray-600">{cart.customer.phone}</p>
-                    <p className="text-sm text-primary-600 font-medium">
-                      Points: {cart.customer.loyaltyPoints || 0}
-                    </p>
                   </div>
-                  <button
-                    onClick={handleRemoveCustomer}
-                    className="text-red-600 hover:text-red-700"
-                    title="Remove customer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-1 mb-1">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="text-xs font-medium text-gray-500">CUSTOMER</span>
-                </div>
-                <p className="font-medium text-gray-700 mb-1">Walk-in Customer</p>
-                <p className="text-xs text-gray-500 mb-2">No loyalty points</p>
-                <button
-                  onClick={() => setShowCustomerModal(true)}
-                  className="w-full bg-blue-600 text-white text-sm py-2 px-3 rounded hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Customer
-                </button>
-              </div>
-            )}
+            ))}
+          </div>
+        </div>
 
-            {/* Cart Items */}
-            <div className="flex-1 overflow-auto mb-4 space-y-2">
-              {cart.items.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">Cart is empty</p>
-              ) : (
-                cart.items.map((item) => (
-                  <div key={item.productId} className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-800">{item.name}</p>
-                        <p className="text-sm text-gray-600">${parseFloat(item.price || 0).toFixed(2)}</p>
-                      </div>
-                      <button
-                        onClick={() => dispatch(removeItem(item.productId))}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+        {/* Low Stock Alerts */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
+            <AlertTriangle className="w-5 h-5 text-orange-500" />
+            Low Stock Alerts
+          </h2>
+          
+          {dashboardData.lowStockProducts.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-500">All products are well stocked!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {dashboardData.lowStockProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-800 text-sm">
+                      {product.name}
+                    </p>
+                    <p className="text-xs text-gray-600">{product.sku}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-lg font-bold ${
+                      product.stockQuantity === 0 
+                        ? 'text-red-600' 
+                        : 'text-orange-600'
+                    }`}>
+                      {product.stockQuantity}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() =>
-                            dispatch(
-                              updateQuantity({
-                                productId: item.productId,
-                                quantity: item.quantity - 1,
-                              })
-                            )
-                          }
-                          className="bg-white border border-gray-300 rounded p-1 hover:bg-gray-100"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="w-8 text-center font-semibold">{item.quantity}</span>
-                        <button
-                          onClick={() =>
-                            dispatch(
-                              updateQuantity({
-                                productId: item.productId,
-                                quantity: item.quantity + 1,
-                              })
-                            )
-                          }
-                          className="bg-white border border-gray-300 rounded p-1 hover:bg-gray-100"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <span className="font-bold text-gray-800">
-                        ${(parseFloat(item.price || 0) * item.quantity).toFixed(2)}
+                    <p className="text-xs text-gray-600">in stock</p>
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={() => navigate('/products')}
+                className="w-full mt-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium"
+              >
+                Manage Inventory
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Payment Method Distribution */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
+            <CreditCard className="w-5 h-5 text-blue-500" />
+            Payment Methods
+          </h2>
+          
+          {dashboardData.paymentMethodBreakdown.length === 0 ? (
+            <div className="text-center py-8">
+              <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-500">No payment data yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {dashboardData.paymentMethodBreakdown.map((payment) => (
+                <div key={payment.method} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${getPaymentMethodColor(payment.method)}`}></div>
+                      <span className="font-medium text-gray-700">
+                        {getPaymentMethodLabel(payment.method)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-600">{payment.count} txn</span>
+                      <span className="font-semibold text-gray-800">
+                        {formatCurrency(payment.total)}
                       </span>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-
-            {/* Discounts and Points */}
-            {cart.items.length > 0 && (
-              <div className="space-y-2 mb-4 pb-4 border-t pt-4">
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={discountAmount}
-                    onChange={(e) => setDiscountAmount(e.target.value)}
-                    placeholder="Discount ($)"
-                    className="input-field flex-1"
-                    step="0.01"
-                  />
-                  <button onClick={handleApplyDiscount} className="btn-secondary">
-                    Apply
-                  </button>
-                </div>
-                {cart.customer && (
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={loyaltyPointsInput}
-                      onChange={(e) => setLoyaltyPointsInput(e.target.value)}
-                      placeholder="Loyalty Points"
-                      className="input-field flex-1"
-                      max={cart.customer.loyaltyPoints}
-                    />
-                    <button onClick={handleApplyLoyaltyPoints} className="btn-secondary">
-                      Redeem
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${getPaymentMethodColor(payment.method)}`}
+                        style={{ width: `${payment.percentage}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs font-medium text-gray-600 w-12 text-right">
+                      {payment.percentage.toFixed(1)}%
+                    </span>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Totals */}
-            <div className="space-y-2 border-t pt-4">
-              <div className="flex justify-between text-gray-600">
-                <span>Subtotal:</span>
-                <span>${cart.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span>Tax (15%):</span>
-                <span>${cart.tax.toFixed(2)}</span>
-              </div>
-              {cart.discount > 0 && (
-                <div className="flex justify-between text-red-600">
-                  <span>Discount:</span>
-                  <span>-${cart.discount.toFixed(2)}</span>
                 </div>
-              )}
-              {cart.loyaltyPointsToRedeem > 0 && (
-                <div className="flex justify-between text-primary-600">
-                  <span>Points ({cart.loyaltyPointsToRedeem}):</span>
-                  <span>-${(cart.loyaltyPointsToRedeem / 100).toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-xl font-bold text-gray-800 pt-2 border-t">
-                <span>Total:</span>
-                <span>${cart.total.toFixed(2)}</span>
-              </div>
-              {cart.customer && (
-                <div className="flex justify-between text-sm text-primary-600">
-                  <span>Points to Earn:</span>
-                  <span>{cart.loyaltyPointsToEarn} pts</span>
-                </div>
-              )}
+              ))}
             </div>
+          )}
+        </div>
+      </div>
 
-            {/* Checkout Button */}
+      {/* Top Products and Recent Transactions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Products */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
+            <ShoppingBag className="w-5 h-5 text-green-600" />
+            Top Selling Products
+          </h2>
+          
+          {dashboardData.topProducts.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-500">No sales data yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {dashboardData.topProducts.map((product, index) => (
+                <div
+                  key={product.id}
+                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full text-blue-600 font-bold text-sm">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-800">{product.name}</p>
+                    <p className="text-xs text-gray-600">
+                      {product.quantitySold} units sold
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-gray-800">
+                      {formatCurrency(product.revenue)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Transactions */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-purple-600" />
+              Recent Transactions
+            </h2>
             <button
-              onClick={handleCheckout}
-              disabled={cart.items.length === 0}
-              className="btn-primary w-full mt-4 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => navigate('/transactions')}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
             >
-              Checkout
+              View All
             </button>
           </div>
-        </div>
-
-      {/* Customer Modal */}
-      {showCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Add Customer</h3>
+          
+          {dashboardData.recentTransactions.length === 0 ? (
+            <div className="text-center py-8">
+              <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-500">No transactions yet</p>
               <button
-                onClick={() => setShowCustomerModal(false)}
-                className="text-gray-500 hover:text-gray-700"
+                onClick={() => navigate('/pos')}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
               >
-                <X className="w-6 h-6" />
+                Start Selling
               </button>
             </div>
-            <div className="space-y-4">
-              <input
-                type="text"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="Enter phone number"
-                className="input-field"
-                autoFocus
-              />
-              <button onClick={handleCustomerLookup} className="btn-primary w-full">
-                Search Customer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Payment</h3>
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-              <p className="text-3xl font-bold text-gray-800 text-center">
-                ${cart.total.toFixed(2)}
-              </p>
-            </div>
-
-            {/* Payment Methods */}
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              <button
-                onClick={() => setPaymentMethod('CASH')}
-                className={`p-3 rounded-lg border-2 flex items-center justify-center gap-2 ${
-                  paymentMethod === 'CASH'
-                    ? 'border-primary-600 bg-primary-50 text-primary-600'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <DollarSign className="w-5 h-5" />
-                <span>Cash</span>
-              </button>
-              <button
-                onClick={() => setPaymentMethod('CARD')}
-                className={`p-3 rounded-lg border-2 flex items-center justify-center gap-2 ${
-                  paymentMethod === 'CARD'
-                    ? 'border-primary-600 bg-primary-50 text-primary-600'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <CreditCard className="w-5 h-5" />
-                <span>Card</span>
-              </button>
-              <button
-                onClick={() => setPaymentMethod('MOBILE_MONEY')}
-                className={`p-3 rounded-lg border-2 flex items-center justify-center gap-2 ${
-                  paymentMethod === 'MOBILE_MONEY'
-                    ? 'border-primary-600 bg-primary-50 text-primary-600'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <Smartphone className="w-5 h-5" />
-                <span>Mobile</span>
-              </button>
-              <button
-                onClick={() => setPaymentMethod('BANK_TRANSFER')}
-                className={`p-3 rounded-lg border-2 flex items-center justify-center gap-2 ${
-                  paymentMethod === 'BANK_TRANSFER'
-                    ? 'border-primary-600 bg-primary-50 text-primary-600'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <Building2 className="w-5 h-5" />
-                <span>Transfer</span>
-              </button>
-            </div>
-
-            {/* Amount Paid */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount Paid
-                </label>
-                <input
-                  type="number"
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
-                  placeholder="0.00"
-                  className="input-field text-2xl"
-                  step="0.01"
-                  autoFocus
-                />
-              </div>
-
-              {amountPaid && parseFloat(amountPaid) >= cart.total && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-gray-600">Change:</p>
-                  <p className="text-2xl font-bold text-green-600">${change.toFixed(2)}</p>
+          ) : (
+            <div className="space-y-3">
+              {dashboardData.recentTransactions.map((transaction) => (
+                <div
+                  key={transaction.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  onClick={() => navigate('/transactions')}
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-800 text-sm">
+                      {transaction.transactionNumber}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {transaction.customer 
+                        ? `${transaction.customer.firstName} ${transaction.customer.lastName}`
+                        : 'Walk-in'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatDateTime(transaction.createdAt)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-gray-800">
+                      {formatCurrency(transaction.total)}
+                    </div>
+                    <span className="inline-block px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
+                      {transaction.items?.length || 0} items
+                    </span>
+                  </div>
                 </div>
-              )}
-
-              <button
-                onClick={handleCompletePayment}
-                disabled={processing || !amountPaid || parseFloat(amountPaid) < cart.total}
-                className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {processing ? 'Processing...' : 'Complete Payment'}
-              </button>
+              ))}
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Receipt Modal */}
-      {showReceiptModal && lastTransaction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                <Receipt className="w-8 h-8 text-green-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">Payment Successful!</h3>
-              <p className="text-gray-600">Transaction #{lastTransaction.transactionNumber}</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total:</span>
-                <span className="font-bold">${parseFloat(lastTransaction.total || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Paid:</span>
-                <span className="font-bold">${parseFloat(lastTransaction.amountPaid || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-green-600">
-                <span>Change:</span>
-                <span className="font-bold">${parseFloat(lastTransaction.changeGiven || 0).toFixed(2)}</span>
-              </div>
-              {lastTransaction.loyaltyPointsEarned > 0 && (
-                <div className="flex justify-between text-primary-600 pt-2 border-t">
-                  <span>Points Earned:</span>
-                  <span className="font-bold">{lastTransaction.loyaltyPointsEarned}</span>
-                </div>
-              )}
-            </div>
-
-            <button onClick={handleNewSale} className="btn-primary w-full py-3">
-              New Sale
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {/* Quick Actions - Navigation */}
-      <div className="mt-6 border-t pt-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            <BarChart3 className="w-5 h-5" />
-            <span className="font-medium">Dashboard</span>
-          </button>
-          
-          <button
-            onClick={() => navigate('/products')}
-            className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <Package className="w-5 h-5" />
-            <span className="font-medium">Products</span>
-          </button>
-          
-          <button
-            onClick={() => navigate('/customers')}
-            className="flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-          >
-            <Users className="w-5 h-5" />
-            <span className="font-medium">Customers</span>
-          </button>
-          
-          <button
-            onClick={() => navigate('/transactions')}
-            className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Receipt className="w-5 h-5" />
-            <span className="font-medium">Transactions</span>
-          </button>
-        </div>
+      {/* Quick Actions */}
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <button
+          onClick={() => navigate('/pos')}
+          className="flex items-center justify-center gap-3 p-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg"
+        >
+          <ShoppingCart className="w-6 h-6" />
+          <span className="font-semibold">New Sale</span>
+        </button>
+        
+        <button
+          onClick={() => navigate('/products')}
+          className="flex items-center justify-center gap-3 p-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-lg"
+        >
+          <Package className="w-6 h-6" />
+          <span className="font-semibold">Manage Products</span>
+        </button>
+        
+        <button
+          onClick={() => navigate('/customers')}
+          className="flex items-center justify-center gap-3 p-4 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors shadow-lg"
+        >
+          <Users className="w-6 h-6" />
+          <span className="font-semibold">View Customers</span>
+        </button>
+        
+        <button
+          onClick={() => navigate('/transactions')}
+          className="flex items-center justify-center gap-3 p-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg"
+        >
+          <Receipt className="w-6 h-6" />
+          <span className="font-semibold">View Transactions</span>
+        </button>
       </div>
     </div>
   );
 };
 
-export default POSTill;
+export default Dashboard;

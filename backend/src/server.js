@@ -9,6 +9,8 @@ import productRoutes from './routes/productRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
+import shiftRoutes from './routes/shiftRoutes.js';
+
 
 // Load environment variables
 dotenv.config();
@@ -51,6 +53,7 @@ app.use(`/api/${API_VERSION}/products`, productRoutes);
 app.use(`/api/${API_VERSION}/categories`, categoryRoutes);
 app.use(`/api/${API_VERSION}/transactions`, transactionRoutes);
 app.use(`/api/${API_VERSION}/customers`, customerRoutes);
+app.use('/api/v1/shifts', shiftRoutes);
 
 // 404 handler
 app.use(notFound);
