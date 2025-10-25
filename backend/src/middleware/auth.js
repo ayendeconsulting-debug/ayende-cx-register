@@ -26,6 +26,7 @@ export const authenticate = async (req, res, next) => {
       where: { id: decoded.id },
       select: {
         id: true,
+        businessId: true,
         email: true,
         username: true,
         firstName: true,
@@ -98,11 +99,11 @@ export const optionalAuth = async (req, res, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       const decoded = verifyAccessToken(token);
-      
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
         select: {
           id: true,
+          businessId: true,
           email: true,
           username: true,
           firstName: true,

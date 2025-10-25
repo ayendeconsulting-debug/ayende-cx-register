@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import authService from '../services/authService';
@@ -113,6 +113,16 @@ const Login = () => {
             )}
           </button>
         </form>
+
+        {/* Registration Link */}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+              Register your business
+            </Link>
+          </p>
+        </div>
 
         {/* Demo Credentials */}
         <div className="mt-8 pt-6 border-t border-gray-200">

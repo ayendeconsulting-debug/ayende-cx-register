@@ -3,18 +3,20 @@ import { AppError } from '../middleware/errorHandler.js';
 
 /**
  * Shift Service - Business logic for shift management
+ * MULTI-TENANT VERSION - All operations filtered by businessId
  */
 
 /**
  * Generate unique shift number
  * Format: SHIFT-YYYYMMDD-XXX
  */
-const generateShiftNumber = async () => {
+const generateShiftNumber = async (businessId) => {
   const today = new Date();
   const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
   
   const lastShift = await prisma.shift.findFirst({
     where: {
+      businessId,
       shiftNumber: {
         startsWith: `SHIFT-${dateStr}`,
       },
@@ -37,10 +39,11 @@ const generateShiftNumber = async () => {
 /**
  * Open a new shift
  */
-export const openShift = async (userId, openingCash, notes = null) => {
+export const openShift = async (businessId, userId, openingCash, notes = null) => {
   // Check if user already has an open shift
   const existingOpenShift = await prisma.shift.findFirst({
     where: {
+      businessId,
       userId,
       status: 'OPEN',
     },
@@ -51,11 +54,12 @@ export const openShift = async (userId, openingCash, notes = null) => {
   }
 
   // Generate shift number
-  const shiftNumber = await generateShiftNumber();
+  const shiftNumber = await generateShiftNumber(businessId);
 
   // Create new shift
   const shift = await prisma.shift.create({
     data: {
+      businessId,
       userId,
       shiftNumber,
       openingCash: parseFloat(openingCash),
@@ -80,10 +84,13 @@ export const openShift = async (userId, openingCash, notes = null) => {
 /**
  * Close a shift
  */
-export const closeShift = async (shiftId, closingCash, notes = null, userId) => {
+export const closeShift = async (businessId, shiftId, closingCash, notes = null, userId) => {
   // Get shift
-  const shift = await prisma.shift.findUnique({
-    where: { id: shiftId },
+  const shift = await prisma.shift.findFirst({
+    where: { 
+      id: shiftId,
+      businessId
+    },
     include: {
       transactions: {
         where: {
@@ -180,7 +187,7 @@ export const closeShift = async (shiftId, closingCash, notes = null, userId) => 
 /**
  * Get all shifts with filters
  */
-export const getAllShifts = async (filters = {}) => {
+export const getAllShifts = async (businessId, filters = {}) => {
   const {
     page = 1,
     limit = 20,
@@ -194,7 +201,7 @@ export const getAllShifts = async (filters = {}) => {
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const where = {};
+  const where = { businessId };
 
   if (userId) {
     where.userId = userId;
@@ -253,9 +260,12 @@ export const getAllShifts = async (filters = {}) => {
 /**
  * Get shift by ID
  */
-export const getShiftById = async (shiftId) => {
-  const shift = await prisma.shift.findUnique({
-    where: { id: shiftId },
+export const getShiftById = async (businessId, shiftId) => {
+  const shift = await prisma.shift.findFirst({
+    where: { 
+      id: shiftId,
+      businessId
+    },
     include: {
       user: {
         select: {
@@ -293,9 +303,10 @@ export const getShiftById = async (shiftId) => {
 /**
  * Get current open shift for a user
  */
-export const getCurrentShift = async (userId) => {
+export const getCurrentShift = async (businessId, userId) => {
   const shift = await prisma.shift.findFirst({
     where: {
+      businessId,
       userId,
       status: 'OPEN',
     },
@@ -322,9 +333,12 @@ export const getCurrentShift = async (userId) => {
 /**
  * Get shift report with detailed analytics
  */
-export const getShiftReport = async (shiftId) => {
-  const shift = await prisma.shift.findUnique({
-    where: { id: shiftId },
+export const getShiftReport = async (businessId, shiftId) => {
+  const shift = await prisma.shift.findFirst({
+    where: { 
+      id: shiftId,
+      businessId
+    },
     include: {
       user: {
         select: {

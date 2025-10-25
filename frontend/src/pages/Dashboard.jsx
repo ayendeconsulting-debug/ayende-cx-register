@@ -13,18 +13,24 @@ import {
   ArrowDown,
   ShoppingCart,
   Activity,
-  CreditCard
+  CreditCard,
+  Building2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import transactionService from '../services/transactionService';
 import productService from '../services/productService';
 import customerService from '../services/customerService';
+import stockAdjustmentService from '../services/stockAdjustmentService';
 import ShiftControl from '../components/ShiftControl';
+import PendingApprovals from '../components/PendingApprovals';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('today'); // today, week, month, year
+  const [showPendingApprovals, setShowPendingApprovals] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [businessInfo, setBusinessInfo] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     salesMetrics: {
       todaySales: 0,
@@ -53,14 +59,46 @@ const Dashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     
+    // Get user from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    // Get business info from localStorage
+    const storedBusiness = localStorage.getItem('business');
+    if (storedBusiness) {
+      try {
+        setBusinessInfo(JSON.parse(storedBusiness));
+      } catch (error) {
+        console.error('Error parsing business info:', error);
+      }
+    }
+    
+    // Load pending approvals count for SUPER_ADMIN
+    if (user.role === 'SUPER_ADMIN') {
+      loadPendingApprovalsCount();
+    }
+    
     // Auto-refresh every 5 minutes
     const intervalId = setInterval(() => {
       fetchDashboardData();
+      if (user.role === 'SUPER_ADMIN') {
+        loadPendingApprovalsCount();
+      }
     }, 5 * 60 * 1000); // 5 minutes
     
     // Cleanup on unmount
     return () => clearInterval(intervalId);
   }, []);
+
+  const loadPendingApprovalsCount = async () => {
+    try {
+      const response = await stockAdjustmentService.getPendingApprovals();
+      if (response.success) {
+        setPendingApprovalsCount(response.data.length);
+      }
+    } catch (error) {
+      console.error('Error loading pending approvals count:', error);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -355,6 +393,14 @@ const Dashboard = () => {
               <BarChart3 className="w-8 h-8" />
               Dashboard
             </h1>
+            {businessInfo && (
+              <div className="flex items-center gap-2 mt-2">
+                <Building2 className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">
+                  {businessInfo.name || businessInfo.businessName}
+                </span>
+              </div>
+            )}
             <p className="text-gray-600 mt-1">Welcome back! Here's what's happening with your business.</p>
           </div>
           <div className="text-xs text-gray-500 flex items-center gap-2">
@@ -726,6 +772,44 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Pending Approvals Widget - SUPER_ADMIN Only */}
+      {(() => {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        return user.role === 'SUPER_ADMIN' && (
+          <div className="mt-6">
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-orange-600" />
+                  Pending Stock Adjustments
+                </h2>
+                {pendingApprovalsCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    {pendingApprovalsCount}
+                  </span>
+                )}
+              </div>
+              
+              {pendingApprovalsCount === 0 ? (
+                <p className="text-gray-500 text-sm">No pending approvals at this time.</p>
+              ) : (
+                <div>
+                  <p className="text-gray-700 mb-4">
+                    You have <span className="font-semibold text-orange-600">{pendingApprovalsCount}</span> stock adjustment{pendingApprovalsCount !== 1 ? 's' : ''} waiting for your approval.
+                  </p>
+                  <button
+                    onClick={() => setShowPendingApprovals(true)}
+                    className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
+                  >
+                    Review Approvals
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Quick Actions */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
         <button
@@ -760,6 +844,16 @@ const Dashboard = () => {
           <span className="font-semibold">View Transactions</span>
         </button>
       </div>
+
+      {/* Pending Approvals Modal */}
+      <PendingApprovals
+        isOpen={showPendingApprovals}
+        onClose={() => setShowPendingApprovals(false)}
+        onApprovalComplete={() => {
+          loadPendingApprovalsCount();
+          // Optionally refresh dashboard data if stock changes affect metrics
+        }}
+      />
     </div>
   );
 };

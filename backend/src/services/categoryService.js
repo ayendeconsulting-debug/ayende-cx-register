@@ -3,13 +3,14 @@ import { AppError } from '../middleware/errorHandler.js';
 
 /**
  * Category Service - Business logic for category operations
+ * MULTI-TENANT VERSION - All operations filtered by businessId
  */
 
 /**
  * Get all categories
  */
-export const getAllCategories = async (includeInactive = false) => {
-  const where = {};
+export const getAllCategories = async (businessId, includeInactive = false) => {
+  const where = { businessId };
   
   if (!includeInactive) {
     where.isActive = true;
@@ -31,9 +32,12 @@ export const getAllCategories = async (includeInactive = false) => {
 /**
  * Get single category by ID
  */
-export const getCategoryById = async (id) => {
-  const category = await prisma.category.findUnique({
-    where: { id },
+export const getCategoryById = async (businessId, id) => {
+  const category = await prisma.category.findFirst({
+    where: { 
+      id,
+      businessId
+    },
     include: {
       products: {
         where: { isActive: true },
@@ -62,18 +66,22 @@ export const getCategoryById = async (id) => {
 /**
  * Create new category
  */
-export const createCategory = async (categoryData, userId) => {
-  // Check if category name already exists
-  const existingCategory = await prisma.category.findUnique({
-    where: { name: categoryData.name },
+export const createCategory = async (businessId, categoryData, userId) => {
+  // Check if category name already exists in this business
+  const existingCategory = await prisma.category.findFirst({
+    where: { 
+      name: categoryData.name,
+      businessId
+    },
   });
 
   if (existingCategory) {
     throw new AppError('Category with this name already exists', 400);
   }
 
-  // Get the highest sort order and add 1
+  // Get the highest sort order and add 1 for this business
   const lastCategory = await prisma.category.findFirst({
+    where: { businessId },
     orderBy: { sortOrder: 'desc' },
   });
 
@@ -81,6 +89,7 @@ export const createCategory = async (categoryData, userId) => {
 
   const category = await prisma.category.create({
     data: {
+      businessId,
       name: categoryData.name,
       description: categoryData.description || null,
       sortOrder: parseInt(sortOrder),
@@ -105,19 +114,25 @@ export const createCategory = async (categoryData, userId) => {
 /**
  * Update category
  */
-export const updateCategory = async (id, categoryData, userId) => {
-  const existingCategory = await prisma.category.findUnique({
-    where: { id },
+export const updateCategory = async (businessId, id, categoryData, userId) => {
+  const existingCategory = await prisma.category.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!existingCategory) {
     throw new AppError('Category not found', 404);
   }
 
-  // Check if name is being changed and if it already exists
+  // Check if name is being changed and if it already exists in this business
   if (categoryData.name && categoryData.name !== existingCategory.name) {
-    const nameExists = await prisma.category.findUnique({
-      where: { name: categoryData.name },
+    const nameExists = await prisma.category.findFirst({
+      where: { 
+        name: categoryData.name,
+        businessId
+      },
     });
 
     if (nameExists) {
@@ -153,9 +168,12 @@ export const updateCategory = async (id, categoryData, userId) => {
 /**
  * Delete category (soft delete)
  */
-export const deleteCategory = async (id, userId) => {
-  const category = await prisma.category.findUnique({
-    where: { id },
+export const deleteCategory = async (businessId, id, userId) => {
+  const category = await prisma.category.findFirst({
+    where: { 
+      id,
+      businessId
+    },
     include: {
       _count: {
         select: { products: true },
@@ -198,8 +216,21 @@ export const deleteCategory = async (id, userId) => {
 /**
  * Reorder categories
  */
-export const reorderCategories = async (orderData, userId) => {
+export const reorderCategories = async (businessId, orderData, userId) => {
   // orderData should be array of { id, sortOrder }
+  // Verify all categories belong to this business
+  const categoryIds = orderData.map(item => item.id);
+  const categories = await prisma.category.findMany({
+    where: {
+      id: { in: categoryIds },
+      businessId
+    }
+  });
+
+  if (categories.length !== categoryIds.length) {
+    throw new AppError('One or more categories not found', 404);
+  }
+
   const updates = orderData.map((item) =>
     prisma.category.update({
       where: { id: item.id },

@@ -3,12 +3,13 @@ import { AppError } from '../middleware/errorHandler.js';
 
 /**
  * Product Service - Business logic for product operations
+ * MULTI-TENANT VERSION - All operations filtered by businessId
  */
 
 /**
  * Get all products with filtering, pagination, and search
  */
-export const getAllProducts = async (filters = {}) => {
+export const getAllProducts = async (businessId, filters = {}) => {
   const {
     page = 1,
     limit = 20,
@@ -23,7 +24,7 @@ export const getAllProducts = async (filters = {}) => {
   const skip = (page - 1) * limit;
 
   // Build where clause
-  const where = {};
+  const where = { businessId };
 
   if (search) {
     where.OR = [
@@ -77,9 +78,12 @@ export const getAllProducts = async (filters = {}) => {
 /**
  * Get single product by ID
  */
-export const getProductById = async (id) => {
-  const product = await prisma.product.findUnique({
-    where: { id },
+export const getProductById = async (businessId, id) => {
+  const product = await prisma.product.findFirst({
+    where: { 
+      id,
+      businessId
+    },
     include: {
       category: true,
       stockMovements: {
@@ -99,9 +103,12 @@ export const getProductById = async (id) => {
 /**
  * Get product by SKU
  */
-export const getProductBySku = async (sku) => {
-  const product = await prisma.product.findUnique({
-    where: { sku },
+export const getProductBySku = async (businessId, sku) => {
+  const product = await prisma.product.findFirst({
+    where: { 
+      sku,
+      businessId
+    },
     include: {
       category: true,
     },
@@ -117,9 +124,12 @@ export const getProductBySku = async (sku) => {
 /**
  * Get product by barcode
  */
-export const getProductByBarcode = async (barcode) => {
-  const product = await prisma.product.findUnique({
-    where: { barcode },
+export const getProductByBarcode = async (businessId, barcode) => {
+  const product = await prisma.product.findFirst({
+    where: { 
+      barcode,
+      businessId
+    },
     include: {
       category: true,
     },
@@ -135,20 +145,26 @@ export const getProductByBarcode = async (barcode) => {
 /**
  * Create new product
  */
-export const createProduct = async (productData, userId) => {
-  // Check if SKU already exists
-  const existingSku = await prisma.product.findUnique({
-    where: { sku: productData.sku },
+export const createProduct = async (businessId, productData, userId) => {
+  // Check if SKU already exists in this business
+  const existingSku = await prisma.product.findFirst({
+    where: { 
+      sku: productData.sku,
+      businessId
+    },
   });
 
   if (existingSku) {
     throw new AppError('Product with this SKU already exists', 400);
   }
 
-  // Check if barcode already exists (if provided)
+  // Check if barcode already exists in this business (if provided)
   if (productData.barcode) {
-    const existingBarcode = await prisma.product.findUnique({
-      where: { barcode: productData.barcode },
+    const existingBarcode = await prisma.product.findFirst({
+      where: { 
+        barcode: productData.barcode,
+        businessId
+      },
     });
 
     if (existingBarcode) {
@@ -156,9 +172,12 @@ export const createProduct = async (productData, userId) => {
     }
   }
 
-  // Verify category exists
-  const category = await prisma.category.findUnique({
-    where: { id: productData.categoryId },
+  // Verify category exists in this business
+  const category = await prisma.category.findFirst({
+    where: { 
+      id: productData.categoryId,
+      businessId
+    },
   });
 
   if (!category) {
@@ -168,6 +187,7 @@ export const createProduct = async (productData, userId) => {
   // Create product
   const product = await prisma.product.create({
     data: {
+      businessId,
       ...productData,
       price: parseFloat(productData.price),
       costPrice: productData.costPrice ? parseFloat(productData.costPrice) : null,
@@ -212,20 +232,26 @@ export const createProduct = async (productData, userId) => {
 /**
  * Update product
  */
-export const updateProduct = async (id, productData, userId) => {
-  // Check if product exists
-  const existingProduct = await prisma.product.findUnique({
-    where: { id },
+export const updateProduct = async (businessId, id, productData, userId) => {
+  // Check if product exists in this business
+  const existingProduct = await prisma.product.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!existingProduct) {
     throw new AppError('Product not found', 404);
   }
 
-  // Check if SKU is being changed and if it already exists
+  // Check if SKU is being changed and if it already exists in this business
   if (productData.sku && productData.sku !== existingProduct.sku) {
-    const existingSku = await prisma.product.findUnique({
-      where: { sku: productData.sku },
+    const existingSku = await prisma.product.findFirst({
+      where: { 
+        sku: productData.sku,
+        businessId
+      },
     });
 
     if (existingSku) {
@@ -233,10 +259,13 @@ export const updateProduct = async (id, productData, userId) => {
     }
   }
 
-  // Check if barcode is being changed and if it already exists
+  // Check if barcode is being changed and if it already exists in this business
   if (productData.barcode && productData.barcode !== existingProduct.barcode) {
-    const existingBarcode = await prisma.product.findUnique({
-      where: { barcode: productData.barcode },
+    const existingBarcode = await prisma.product.findFirst({
+      where: { 
+        barcode: productData.barcode,
+        businessId
+      },
     });
 
     if (existingBarcode) {
@@ -244,10 +273,13 @@ export const updateProduct = async (id, productData, userId) => {
     }
   }
 
-  // Verify category exists if being changed
+  // Verify category exists in this business if being changed
   if (productData.categoryId && productData.categoryId !== existingProduct.categoryId) {
-    const category = await prisma.category.findUnique({
-      where: { id: productData.categoryId },
+    const category = await prisma.category.findFirst({
+      where: { 
+        id: productData.categoryId,
+        businessId
+      },
     });
 
     if (!category) {
@@ -291,9 +323,12 @@ export const updateProduct = async (id, productData, userId) => {
 /**
  * Delete product (soft delete)
  */
-export const deleteProduct = async (id, userId) => {
-  const product = await prisma.product.findUnique({
-    where: { id },
+export const deleteProduct = async (businessId, id, userId) => {
+  const product = await prisma.product.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!product) {
@@ -323,11 +358,14 @@ export const deleteProduct = async (id, userId) => {
 /**
  * Adjust product stock
  */
-export const adjustStock = async (id, adjustmentData, userId) => {
+export const adjustStock = async (businessId, id, adjustmentData, userId) => {
   const { quantity, movementType, reference, notes } = adjustmentData;
 
-  const product = await prisma.product.findUnique({
-    where: { id },
+  const product = await prisma.product.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!product) {
@@ -406,14 +444,15 @@ export const adjustStock = async (id, adjustmentData, userId) => {
 /**
  * Get low stock products
  */
-export const getLowStockProducts = async () => {
+export const getLowStockProducts = async (businessId) => {
   // Use raw SQL comparison since Prisma doesn't support comparing two columns directly
   const products = await prisma.$queryRaw`
     SELECT p.*, 
            json_build_object('id', c.id, 'name', c.name) as category
     FROM "Product" p
     LEFT JOIN "Category" c ON p."categoryId" = c.id
-    WHERE p."isActive" = true 
+    WHERE p."businessId" = ${businessId}
+      AND p."isActive" = true 
       AND p."stockQuantity" <= p."lowStockAlert"
     ORDER BY p."stockQuantity" ASC
   `;
@@ -424,9 +463,12 @@ export const getLowStockProducts = async () => {
 /**
  * Get stock movements for a product
  */
-export const getProductStockHistory = async (id, limit = 50) => {
-  const product = await prisma.product.findUnique({
-    where: { id },
+export const getProductStockHistory = async (businessId, id, limit = 50) => {
+  const product = await prisma.product.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!product) {

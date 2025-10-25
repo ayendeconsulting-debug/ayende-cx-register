@@ -9,7 +9,7 @@ import * as categoryService from '../services/categoryService.js';
  */
 export const getCategories = asyncHandler(async (req, res) => {
   const includeInactive = req.query.includeInactive === 'true';
-  const categories = await categoryService.getAllCategories(includeInactive);
+  const categories = await categoryService.getAllCategories(req.user.businessId, includeInactive);
   return successResponse(res, categories, 'Categories retrieved successfully');
 });
 
@@ -19,7 +19,7 @@ export const getCategories = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getCategory = asyncHandler(async (req, res) => {
-  const category = await categoryService.getCategoryById(req.params.id);
+  const category = await categoryService.getCategoryById(req.user.businessId, req.params.id);
   return successResponse(res, category, 'Category retrieved successfully');
 });
 
@@ -29,7 +29,7 @@ export const getCategory = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const createCategory = asyncHandler(async (req, res) => {
-  const category = await categoryService.createCategory(req.body, req.user.id);
+  const category = await categoryService.createCategory(req.user.businessId, req.body, req.user.id);
   return createdResponse(res, category, 'Category created successfully');
 });
 
@@ -39,7 +39,7 @@ export const createCategory = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const updateCategory = asyncHandler(async (req, res) => {
-  const category = await categoryService.updateCategory(req.params.id, req.body, req.user.id);
+  const category = await categoryService.updateCategory(req.user.businessId, req.params.id, req.body, req.user.id);
   return successResponse(res, category, 'Category updated successfully');
 });
 
@@ -49,7 +49,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const deleteCategory = asyncHandler(async (req, res) => {
-  await categoryService.deleteCategory(req.params.id, req.user.id);
+  await categoryService.deleteCategory(req.user.businessId, req.params.id, req.user.id);
   return successResponse(res, null, 'Category deleted successfully');
 });
 
@@ -59,6 +59,6 @@ export const deleteCategory = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const reorderCategories = asyncHandler(async (req, res) => {
-  const result = await categoryService.reorderCategories(req.body, req.user.id);
+  const result = await categoryService.reorderCategories(req.user.businessId, req.body, req.user.id);
   return successResponse(res, result, 'Categories reordered successfully');
 });

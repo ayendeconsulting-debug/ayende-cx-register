@@ -17,7 +17,7 @@ export const openShift = asyncHandler(async (req, res) => {
     });
   }
 
-  const shift = await shiftService.openShift(req.user.id, openingCash, notes);
+  const shift = await shiftService.openShift(req.user.businessId, req.user.id, openingCash, notes);
   return createdResponse(res, shift, 'Shift opened successfully');
 });
 
@@ -37,6 +37,7 @@ export const closeShift = asyncHandler(async (req, res) => {
   }
 
   const shift = await shiftService.closeShift(
+    req.user.businessId,
     req.params.id,
     closingCash,
     notes,
@@ -62,7 +63,7 @@ export const getShifts = asyncHandler(async (req, res) => {
     sortOrder: req.query.sortOrder,
   };
 
-  const result = await shiftService.getAllShifts(filters);
+  const result = await shiftService.getAllShifts(req.user.businessId, filters);
 
   return paginatedResponse(
     res,
@@ -80,7 +81,7 @@ export const getShifts = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getCurrentShift = asyncHandler(async (req, res) => {
-  const shift = await shiftService.getCurrentShift(req.user.id);
+  const shift = await shiftService.getCurrentShift(req.user.businessId, req.user.id);
 
   if (!shift) {
     return res.status(404).json({
@@ -99,7 +100,7 @@ export const getCurrentShift = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getShift = asyncHandler(async (req, res) => {
-  const shift = await shiftService.getShiftById(req.params.id);
+  const shift = await shiftService.getShiftById(req.user.businessId, req.params.id);
 
   // Cashiers can only view their own shifts
   if (req.user.role === 'CASHIER' && shift.userId !== req.user.id) {
@@ -118,7 +119,7 @@ export const getShift = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getShiftReport = asyncHandler(async (req, res) => {
-  const report = await shiftService.getShiftReport(req.params.id);
+  const report = await shiftService.getShiftReport(req.user.businessId, req.params.id);
 
   // Cashiers can only view their own shift reports
   if (req.user.role === 'CASHIER' && report.shift.user.id !== req.user.id) {

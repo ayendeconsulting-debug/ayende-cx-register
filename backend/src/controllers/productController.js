@@ -19,7 +19,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     sortOrder: req.query.sortOrder,
   };
 
-  const result = await productService.getAllProducts(filters);
+  const result = await productService.getAllProducts(req.user.businessId, filters);
 
   return paginatedResponse(
     res,
@@ -37,7 +37,7 @@ export const getProducts = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getProduct = asyncHandler(async (req, res) => {
-  const product = await productService.getProductById(req.params.id);
+  const product = await productService.getProductById(req.user.businessId, req.params.id);
   return successResponse(res, product, 'Product retrieved successfully');
 });
 
@@ -47,7 +47,7 @@ export const getProduct = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getProductBySku = asyncHandler(async (req, res) => {
-  const product = await productService.getProductBySku(req.params.sku);
+  const product = await productService.getProductBySku(req.user.businessId, req.params.sku);
   return successResponse(res, product, 'Product retrieved successfully');
 });
 
@@ -57,7 +57,7 @@ export const getProductBySku = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getProductByBarcode = asyncHandler(async (req, res) => {
-  const product = await productService.getProductByBarcode(req.params.barcode);
+  const product = await productService.getProductByBarcode(req.user.businessId, req.params.barcode);
   return successResponse(res, product, 'Product retrieved successfully');
 });
 
@@ -67,7 +67,7 @@ export const getProductByBarcode = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN, INVENTORY_MANAGER)
  */
 export const createProduct = asyncHandler(async (req, res) => {
-  const product = await productService.createProduct(req.body, req.user.id);
+  const product = await productService.createProduct(req.user.businessId, req.body, req.user.id);
   return createdResponse(res, product, 'Product created successfully');
 });
 
@@ -77,7 +77,7 @@ export const createProduct = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN, INVENTORY_MANAGER)
  */
 export const updateProduct = asyncHandler(async (req, res) => {
-  const product = await productService.updateProduct(req.params.id, req.body, req.user.id);
+  const product = await productService.updateProduct(req.user.businessId, req.params.id, req.body, req.user.id);
   return successResponse(res, product, 'Product updated successfully');
 });
 
@@ -87,7 +87,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const deleteProduct = asyncHandler(async (req, res) => {
-  await productService.deleteProduct(req.params.id, req.user.id);
+  await productService.deleteProduct(req.user.businessId, req.params.id, req.user.id);
   return successResponse(res, null, 'Product deleted successfully');
 });
 
@@ -97,7 +97,7 @@ export const deleteProduct = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN, INVENTORY_MANAGER)
  */
 export const adjustStock = asyncHandler(async (req, res) => {
-  const result = await productService.adjustStock(req.params.id, req.body, req.user.id);
+  const result = await productService.adjustStock(req.user.businessId, req.params.id, req.body, req.user.id);
   return successResponse(res, result, 'Stock adjusted successfully');
 });
 
@@ -107,7 +107,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN, INVENTORY_MANAGER)
  */
 export const getLowStockProducts = asyncHandler(async (req, res) => {
-  const products = await productService.getLowStockProducts();
+  const products = await productService.getLowStockProducts(req.user.businessId);
   return successResponse(res, products, 'Low stock products retrieved successfully');
 });
 
@@ -118,6 +118,6 @@ export const getLowStockProducts = asyncHandler(async (req, res) => {
  */
 export const getStockHistory = asyncHandler(async (req, res) => {
   const limit = req.query.limit || 50;
-  const movements = await productService.getProductStockHistory(req.params.id, limit);
+  const movements = await productService.getProductStockHistory(req.user.businessId, req.params.id, limit);
   return successResponse(res, movements, 'Stock history retrieved successfully');
 });

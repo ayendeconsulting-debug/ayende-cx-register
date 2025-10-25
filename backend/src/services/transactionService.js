@@ -9,13 +9,14 @@ import { AppError } from '../middleware/errorHandler.js';
  * Generate unique transaction number
  * Format: TXN-YYYYMMDD-XXX
  */
-const generateTransactionNumber = async () => {
+const generateTransactionNumber = async (businessId) => {
   const today = new Date();
   const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
   
   // Find the last transaction with today's date prefix to get the next sequence number
   const lastTransaction = await prisma.transaction.findFirst({
-    where: {
+    where:  {
+       businessId,
       transactionNumber: {
         startsWith: `TXN-${dateStr}`,
       },
@@ -88,7 +89,7 @@ const calculateLoyaltyPointsEarned = (items, pointsPerDollar = 10) => {
 /**
  * Create a new transaction (sale)
  */
-export const createTransaction = async (transactionData, userId) => {
+export const createTransaction = async (transactionData, userId, businessId) => {
   const {
     customerId,
     items,
@@ -100,26 +101,45 @@ export const createTransaction = async (transactionData, userId) => {
     shiftId,
   } = transactionData;
 
+  // Get business for currency and tax settings
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: {
+      currency: true,
+      currencyCode: true,
+      taxRate: true,
+      taxEnabled: true
+    }
+  });
+
+  if (!business) {
+    throw new AppError('Business not found', 404);
+  }
+
+  // Use business tax rate instead of system config
+  const taxRate = business.taxEnabled ? parseFloat(business.taxRate) : 0;
+ 
   // Validate items
   if (!items || items.length === 0) {
     throw new AppError('Transaction must have at least one item', 400);
   }
 
-  // Get system configuration
-  const [taxRateConfig, loyaltyPointsConfig, loyaltyRedemptionConfig] = await Promise.all([
-    prisma.systemConfig.findUnique({ where: { key: 'tax_rate' } }),
+  // // Get loyalty configuration
+  const [loyaltyPointsConfig, loyaltyRedemptionConfig] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { key: 'loyalty_points_per_dollar' } }),
     prisma.systemConfig.findUnique({ where: { key: 'loyalty_redemption_rate' } }),
   ]);
 
-  const taxRate = parseFloat(taxRateConfig?.value || '0.15');
   const pointsPerDollar = parseInt(loyaltyPointsConfig?.value || '10');
   const loyaltyRedemptionRate = parseInt(loyaltyRedemptionConfig?.value || '100');
 
   // Fetch product details and validate stock
   const productIds = items.map(item => item.productId);
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds } },
+    where: { 
+      id: { in: productIds },
+      businessId
+    },
   });
 
   if (products.length !== productIds.length) {
@@ -162,7 +182,8 @@ export const createTransaction = async (transactionData, userId) => {
       discount: parseFloat(itemDiscount.toFixed(2)),
       tax: parseFloat(itemTax.toFixed(2)),
       total: parseFloat(itemTotal.toFixed(2)),
-     
+      currency: business.currency,
+      currencyCode: business.currencyCode
     };
   });
 
@@ -210,13 +231,14 @@ export const createTransaction = async (transactionData, userId) => {
   }
 
   // Generate transaction number
-  const transactionNumber = await generateTransactionNumber();
+  const transactionNumber = await generateTransactionNumber(businessId);
 
   // Create transaction with all related data in a single database transaction
   const transaction = await prisma.$transaction(async (tx) => {
     // 1. Create the transaction
     const newTransaction = await tx.transaction.create({
       data: {
+        businessId,
         transactionNumber,
         customerId: customerId || null,
         userId,
@@ -225,6 +247,8 @@ export const createTransaction = async (transactionData, userId) => {
         taxAmount: totals.taxAmount,
         discountAmount: totals.discountAmount,
         total: totals.total,
+        currency: business.currency,
+        currencyCode: business.currencyCode,
         paymentMethod,
         amountPaid: paidAmount,
         changeGiven,
@@ -278,6 +302,7 @@ export const createTransaction = async (transactionData, userId) => {
     }
 
     // 3. Update customer loyalty points
+// 3. Update customer loyalty points
     if (customerId) {
       const netPoints = loyaltyPointsEarned - loyaltyPointsRedeemed;
       
@@ -291,32 +316,34 @@ export const createTransaction = async (transactionData, userId) => {
         },
       });
 
-      // Create loyalty transaction for points earned
+      // Create loyalty transaction for points earned - MUST BE INSIDE if(customerId)
       if (loyaltyPointsEarned > 0) {
         await tx.loyaltyTransaction.create({
           data: {
+            businessId,
             customerId,
             type: 'EARNED',
             points: loyaltyPointsEarned,
             transactionId: newTransaction.id,
-            description: `Points earned from purchase ${transactionNumber}`,
+            description: `Points earned from transaction ${transactionNumber}`,
           },
         });
       }
 
-      // Create loyalty transaction for points redeemed
+      // Create loyalty transaction for points redeemed - MUST BE INSIDE if(customerId)
       if (loyaltyPointsRedeemed > 0) {
         await tx.loyaltyTransaction.create({
           data: {
+            businessId,
             customerId,
             type: 'REDEEMED',
             points: -loyaltyPointsRedeemed,
             transactionId: newTransaction.id,
-            description: `Points redeemed on purchase ${transactionNumber}`,
+            description: `Points redeemed in transaction ${transactionNumber}`,
           },
         });
       }
-    }
+    } // <-- Make sure this closing brace is AFTER all loyalty transactions
 
     // 4. Create audit log
     await tx.auditLog.create({
@@ -342,7 +369,7 @@ export const createTransaction = async (transactionData, userId) => {
 /**
  * Get all transactions with filters
  */
-export const getAllTransactions = async (filters = {}) => {
+export const getAllTransactions = async (businessId, filters = {}) => {
   const {
     page = 1,
     limit = 20,
@@ -359,7 +386,7 @@ export const getAllTransactions = async (filters = {}) => {
   } = filters;
 
   const skip = (page - 1) * limit;
-  const where = {};
+  const where = {businessId};
 
   if (status) where.status = status;
   if (customerId) where.customerId = customerId;
@@ -429,9 +456,11 @@ export const getAllTransactions = async (filters = {}) => {
 /**
  * Get single transaction by ID
  */
-export const getTransactionById = async (id) => {
+export const getTransactionById = async (id, businessId) => {
   const transaction = await prisma.transaction.findUnique({
-    where: { id },
+    where: { id,
+      businessId
+     },
     include: {
       customer: true,
       user: {
@@ -457,9 +486,11 @@ export const getTransactionById = async (id) => {
 /**
  * Get transaction by transaction number
  */
-export const getTransactionByNumber = async (transactionNumber) => {
+export const getTransactionByNumber = async (transactionNumber, businessId) => {
   const transaction = await prisma.transaction.findUnique({
-    where: { transactionNumber },
+    where: { transactionNumber,
+      businessId
+     },
     include: {
       customer: true,
       user: {
@@ -484,9 +515,12 @@ export const getTransactionByNumber = async (transactionNumber) => {
 /**
  * Void a transaction
  */
-export const voidTransaction = async (id, reason, userId) => {
-  const transaction = await prisma.transaction.findUnique({
-    where: { id },
+export const voidTransaction = async (id, reason, userId, businessId) => {
+  const transaction = await prisma.transaction.findFirst({
+    where: { 
+      id,
+      businessId
+    },
     include: { items: true },
   });
 
@@ -561,7 +595,8 @@ export const voidTransaction = async (id, reason, userId) => {
       if (netPoints !== 0) {
         await tx.loyaltyTransaction.create({
           data: {
-            customerId: transaction.customerId,
+             businessId,
+             customerId: transaction.customerId,
             type: 'ADJUSTED',
             points: netPoints,
             transactionId: transaction.id,
@@ -591,8 +626,9 @@ export const voidTransaction = async (id, reason, userId) => {
 /**
  * Get sales summary
  */
-export const getSalesSummary = async (startDate, endDate) => {
+export const getSalesSummary = async (businessId, startDate, endDate) => {
   const where = {
+    businessId,
     status: 'COMPLETED',
     createdAt: {},
   };

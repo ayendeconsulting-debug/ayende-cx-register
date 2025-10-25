@@ -1,16 +1,20 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { 
   ShoppingCart, 
   Package, 
   Users, 
   Receipt,
   BarChart3,
+  Mail,
   Home
 } from 'lucide-react';
 
 const QuickActions = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useSelector((state) => state.auth);
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   
   // Define all possible actions
   const allActions = [
@@ -45,6 +49,16 @@ const QuickActions = () => {
       color: 'bg-green-600 hover:bg-green-700'
     }
   ];
+
+  // Add Team Invitations for admins
+  if (isAdmin) {
+    allActions.push({
+      path: '/team/invitations',
+      icon: Mail,
+      label: 'Team Invitations',
+      color: 'bg-indigo-600 hover:bg-indigo-700'
+    });
+  }
 
   // Filter out current page and show 4 most relevant actions
   const getRelevantActions = () => {

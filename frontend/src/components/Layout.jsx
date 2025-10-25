@@ -6,6 +6,7 @@ import {
   Package, 
   Users, 
   Receipt,
+  Mail,
   LogOut,
   Menu,
   X
@@ -32,6 +33,16 @@ const Layout = () => {
     { path: '/customers', icon: Users, label: 'Customers' },
     { path: '/transactions', icon: Receipt, label: 'Transactions' },
   ];
+
+  // Add Team Invitations link for ADMIN and SUPER_ADMIN only
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  if (isAdmin) {
+    navItems.push({ 
+      path: '/team/invitations', 
+      icon: Mail, 
+      label: 'Team Invitations' 
+    });
+  }
 
   const isActive = (path) => location.pathname === path;
 

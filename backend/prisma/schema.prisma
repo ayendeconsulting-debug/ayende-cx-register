@@ -1,5 +1,6 @@
 // Ayende-CX Payment Register System - Database Schema
-// This schema supports POS operations, CRM integration, and loyalty programs
+// Multi-Tenant POS System with Currency Support
+// Integrates with Ayende-CX CRM as a SaaS module
 
 generator client {
   provider = "prisma-client-js"
@@ -11,36 +12,155 @@ datasource db {
 }
 
 // ============================================
+// BUSINESS / TENANT MANAGEMENT
+// ============================================
+
+model Business {
+  id                String   @id @default(uuid())
+  externalTenantId  String?  @unique // Ayende-CX tenant ID for integration
+  
+  // Business Information
+  businessName      String
+  businessAddress   String?
+  businessCity      String?
+  businessState     String?
+  businessZipCode   String?
+  businessCountry   String?
+  businessPhone     String?
+  businessEmail     String?
+  businessWebsite   String?
+  
+  // Branding
+  logoUrl           String?
+  primaryColor      String?  @default("#3B82F6") // Hex color
+  secondaryColor    String?  @default("#10B981") // Hex color
+  
+  // Regional Settings
+  currency          String   @default("$") // Currency symbol: $, €, £, ₦, ₵, etc.
+  currencyCode      String   @default("USD") // ISO 4217: USD, CAD, NGN, GHS, etc.
+  timezone          String   @default("America/Toronto")
+  dateFormat        String   @default("MM/DD/YYYY")
+  timeFormat        String   @default("12") // 12 or 24 hour
+  
+  // Tax Settings
+  taxEnabled        Boolean  @default(true)
+  taxRate           Decimal  @default(0.00) @db.Decimal(5, 4) // e.g., 0.0750 = 7.5%
+  taxLabel          String   @default("Tax")
+  taxNumber         String?  // Business tax registration number
+  
+  // Business Settings
+  receiptHeader     String?  @db.Text
+  receiptFooter     String?  @db.Text
+  loyaltyEnabled    Boolean  @default(true)
+  
+  // Subscription & Status
+  isActive          Boolean  @default(true)
+  subscriptionTier  String?  @default("BASIC") // BASIC, PRO, ENTERPRISE
+  subscriptionExpiry DateTime?
+  
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  users             User[]
+  customers         Customer[]
+  products          Product[]
+  categories        Category[]
+  transactions      Transaction[]
+  shifts            Shift[]
+  stockAdjustments  StockAdjustment[]
+  loyaltyTransactions LoyaltyTransaction[]
+  userInvitations   UserInvitation[]
+  
+  @@index([externalTenantId])
+  @@index([businessName])
+}
+
+// ============================================
 // USER MANAGEMENT & AUTHENTICATION
 // ============================================
 
 enum UserRole {
-  SUPER_ADMIN    // Full system access
-  ADMIN          // Business owner/manager
-  CASHIER        // POS operator
+  SUPER_ADMIN // Full system access
+  ADMIN // Business owner/manager
+  CASHIER // POS operator
   INVENTORY_MANAGER // Stock management only
 }
 
 model User {
-  id            String       @id @default(uuid())
-  email         String       @unique
-  username      String       @unique
-  passwordHash  String
-  firstName     String
-  lastName      String
-  role          UserRole     @default(CASHIER)
-  isActive      Boolean      @default(true)
-  lastLogin     DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  
+  id           String    @id @default(uuid())
+  businessId   String    // Multi-tenant isolation
+  email        String
+  username     String
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         UserRole  @default(CASHIER)
+  isActive     Boolean   @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
   // Relations
-  transactions  Transaction[]
-  shifts        Shift[]
-  auditLogs     AuditLog[]
+  business            Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions        Transaction[]
+  shifts              Shift[]
+  auditLogs           AuditLog[]
   
+  // Stock Adjustment Relations
+  createdAdjustments  StockAdjustment[]         @relation("CreatedAdjustments")
+  approvedAdjustments StockAdjustment[]         @relation("ApprovedAdjustments")
+  approvals           StockAdjustmentApproval[]
+  stockMovements      StockMovementHistory[]
+  
+  // User Invitation Relations
+  invitationsSent     UserInvitation[]          @relation("InvitedUsers")
+
+  @@unique([businessId, email])
+  @@unique([businessId, username])
+  @@index([businessId])
   @@index([email])
   @@index([username])
+}
+
+// Add this new model
+model UserInvitation {
+  id               String   @id @default(uuid())
+  businessId       String
+  business         Business @relation(fields: [businessId], references: [id])
+  
+  email            String
+  firstName        String
+  lastName         String
+  role             UserRole
+  
+  invitationToken  String   @unique
+  expiresAt        DateTime
+  
+  invitedBy        String
+  inviter          User     @relation("InvitedUsers", fields: [invitedBy], references: [id])
+  
+  message          String?  @db.Text
+  status           InvitationStatus @default(PENDING)
+  
+  acceptedAt       DateTime?
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([email])
+  @@index([invitationToken])
+  @@index([status])
+}
+
+// Add this new enum
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
 }
 
 // ============================================
@@ -48,38 +168,43 @@ model User {
 // ============================================
 
 model Customer {
-  id              String       @id @default(uuid())
-  firstName       String
-  lastName        String
-  email           String?      @unique
-  phone           String?      @unique
-  dateOfBirth     DateTime?
-  
+  id          String    @id @default(uuid())
+  businessId  String    // Multi-tenant isolation
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  dateOfBirth DateTime?
+
   // Loyalty Program
-  loyaltyPoints   Int          @default(0)
-  totalSpent      Decimal      @default(0) @db.Decimal(10, 2)
-  visitCount      Int          @default(0)
-  lastVisit       DateTime?
-  memberSince     DateTime     @default(now())
-  loyaltyTier     LoyaltyTier  @default(BRONZE)
-  
+  loyaltyPoints Int         @default(0)
+  totalSpent    Decimal     @default(0) @db.Decimal(10, 2)
+  visitCount    Int         @default(0)
+  lastVisit     DateTime?
+  memberSince   DateTime    @default(now())
+  loyaltyTier   LoyaltyTier @default(BRONZE)
+
   // Contact & Preferences
-  address         String?
-  city            String?
-  state           String?
-  zipCode         String?
-  marketingOptIn  Boolean      @default(false)
-  
+  address        String?
+  city           String?
+  state          String?
+  zipCode        String?
+  marketingOptIn Boolean @default(false)
+
   // Metadata
-  isActive        Boolean      @default(true)
-  notes           String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  transactions    Transaction[]
-  loyaltyHistory  LoyaltyTransaction[]
-  
+  business       Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  loyaltyHistory LoyaltyTransaction[]
+
+  @@unique([businessId, email])
+  @@unique([businessId, phone])
+  @@index([businessId])
   @@index([email])
   @@index([phone])
   @@index([loyaltyTier])
@@ -97,54 +222,67 @@ enum LoyaltyTier {
 // ============================================
 
 model Category {
-  id          String    @id @default(uuid())
-  name        String    @unique
+  id          String   @id @default(uuid())
+  businessId  String   // Multi-tenant isolation
+  name        String
   description String?
-  isActive    Boolean   @default(true)
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Relations
-  products    Product[]
-  
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
   @@index([name])
 }
 
 model Product {
-  id              String    @id @default(uuid())
-  sku             String    @unique
-  name            String
-  description     String?
-  categoryId      String
-  
-  // Pricing
-  price           Decimal   @db.Decimal(10, 2)
-  costPrice       Decimal?  @db.Decimal(10, 2)
-  
+  id          String  @id @default(uuid())
+  businessId  String  // Multi-tenant isolation
+  sku         String
+  name        String
+  description String?
+  categoryId  String
+
+  // Pricing with Currency
+  price         Decimal @db.Decimal(10, 2)
+  costPrice     Decimal? @db.Decimal(10, 2)
+  currency      String  @default("$") // Currency symbol for this product
+  currencyCode  String  @default("USD") // ISO code
+
   // Inventory
-  stockQuantity   Int       @default(0)
-  lowStockAlert   Int       @default(10)
-  unit            String    @default("unit") // unit, kg, lb, etc
-  
+  stockQuantity Int    @default(0)
+  lowStockAlert Int    @default(10)
+  unit          String @default("unit") // unit, kg, lb, etc
+
   // Product Details
-  barcode         String?   @unique
-  imageUrl        String?
-  isActive        Boolean   @default(true)
-  isTaxable       Boolean   @default(true)
-  
+  barcode   String? 
+  imageUrl  String?
+  isActive  Boolean @default(true)
+  isTaxable Boolean @default(true)
+
   // Loyalty Integration
-  loyaltyPoints   Int       @default(0) // Points earned per purchase
-  
+  loyaltyPoints Int @default(0) // Points earned per purchase
+
   // Metadata
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  category        Category  @relation(fields: [categoryId], references: [id])
-  transactionItems TransactionItem[]
-  stockMovements  StockMovement[]
-  
+  business          Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category          Category               @relation(fields: [categoryId], references: [id])
+  transactionItems  TransactionItem[]
+  stockMovements    StockMovement[]
+  stockAdjustments  StockAdjustment[]
+  adjustmentHistory StockMovementHistory[]
+
+  @@unique([businessId, sku])
+  @@unique([businessId, barcode])
+  @@index([businessId])
   @@index([sku])
   @@index([barcode])
   @@index([categoryId])
@@ -155,29 +293,29 @@ model Product {
 // STOCK MANAGEMENT
 // ============================================
 
-enum MovementType {
-  PURCHASE      // Stock in
-  SALE          // Stock out
-  ADJUSTMENT    // Manual correction
-  RETURN        // Customer return
-  DAMAGE        // Damaged goods
-  TRANSFER      // Between locations
+enum StockMovementType {
+  PURCHASE // Stock in
+  SALE // Stock out
+  ADJUSTMENT // Manual correction
+  RETURN // Customer return
+  DAMAGE // Damaged goods
+  TRANSFER // Between locations
 }
 
 model StockMovement {
-  id            String       @id @default(uuid())
+  id            String            @id @default(uuid())
   productId     String
-  movementType  MovementType
+  movementType  StockMovementType
   quantity      Int
   previousStock Int
   newStock      Int
-  reference     String?      // Invoice/order number
+  reference     String? // Invoice/order number
   notes         String?
-  createdAt     DateTime     @default(now())
-  
+  createdAt     DateTime          @default(now())
+
   // Relations
-  product       Product      @relation(fields: [productId], references: [id])
-  
+  product Product @relation(fields: [productId], references: [id])
+
   @@index([productId])
   @@index([createdAt])
 }
@@ -203,48 +341,54 @@ enum PaymentMethod {
 }
 
 model Transaction {
-  id                String            @id @default(uuid())
-  transactionNumber String            @unique // Human-readable: TXN-20250101-001
-  
+  id                String @id @default(uuid())
+  businessId        String // Multi-tenant isolation
+  transactionNumber String // Human-readable: TXN-20250101-001
+
   // Customer & Staff
-  customerId        String?
-  userId            String            // Cashier who processed
-  
-  // Financial Details
-  subtotal          Decimal           @db.Decimal(10, 2)
-  taxAmount         Decimal           @default(0) @db.Decimal(10, 2)
-  discountAmount    Decimal           @default(0) @db.Decimal(10, 2)
-  total             Decimal           @db.Decimal(10, 2)
-  
+  customerId String?
+  userId     String // Cashier who processed
+
+  // Financial Details with Currency
+  subtotal       Decimal @db.Decimal(10, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(10, 2)
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
+  total          Decimal @db.Decimal(10, 2)
+  currency       String  @default("$") // Transaction currency symbol
+  currencyCode   String  @default("USD") // ISO code
+
   // Payment
-  paymentMethod     PaymentMethod
-  amountPaid        Decimal           @db.Decimal(10, 2)
-  changeGiven       Decimal           @default(0) @db.Decimal(10, 2)
-  
+  paymentMethod PaymentMethod
+  amountPaid    Decimal       @db.Decimal(10, 2)
+  changeGiven   Decimal       @default(0) @db.Decimal(10, 2)
+
   // Loyalty
-  loyaltyPointsEarned Int             @default(0)
-  loyaltyPointsRedeemed Int           @default(0)
-  
+  loyaltyPointsEarned   Int @default(0)
+  loyaltyPointsRedeemed Int @default(0)
+
   // Transaction Status
-  status            TransactionStatus @default(COMPLETED)
-  voidReason        String?
-  refundedAt        DateTime?
-  
+  status     TransactionStatus @default(COMPLETED)
+  voidReason String?
+  refundedAt DateTime?
+
   // Shift tracking
-  shiftId           String?
-  
+  shiftId String?
+
   // Metadata
-  notes             String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  customer          Customer?         @relation(fields: [customerId], references: [id])
-  user              User              @relation(fields: [userId], references: [id])
-  shift             Shift?            @relation(fields: [shiftId], references: [id])
-  items             TransactionItem[]
-  payments          PaymentDetail[]
-  
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer?         @relation(fields: [customerId], references: [id])
+  user     User              @relation(fields: [userId], references: [id])
+  shift    Shift?            @relation(fields: [shiftId], references: [id])
+  items    TransactionItem[]
+  payments PaymentDetail[]
+
+  @@unique([businessId, transactionNumber])
+  @@index([businessId])
   @@index([transactionNumber])
   @@index([customerId])
   @@index([userId])
@@ -253,42 +397,43 @@ model Transaction {
 }
 
 model TransactionItem {
-  id              String      @id @default(uuid())
-  transactionId   String
-  productId       String
-  
+  id            String @id @default(uuid())
+  transactionId String
+  productId     String
+
   // Product details at time of sale (for historical accuracy)
-  productName     String
-  sku             String
-  quantity        Int
-  unitPrice       Decimal     @db.Decimal(10, 2)
-  subtotal        Decimal     @db.Decimal(10, 2)
-  discount        Decimal     @default(0) @db.Decimal(10, 2)
-  tax             Decimal     @default(0) @db.Decimal(10, 2)
-  total           Decimal     @db.Decimal(10, 2)
-  
-  createdAt       DateTime    @default(now())
-  
+  productName  String
+  sku          String
+  quantity     Int
+  unitPrice    Decimal @db.Decimal(10, 2)
+  subtotal     Decimal @db.Decimal(10, 2)
+  discount     Decimal @default(0) @db.Decimal(10, 2)
+  tax          Decimal @default(0) @db.Decimal(10, 2)
+  total        Decimal @db.Decimal(10, 2)
+  currency     String  @default("$") // Item currency symbol
+  currencyCode String  @default("USD") // ISO code
+
+  createdAt DateTime @default(now())
+
   // Relations
-  transaction     Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  product         Product     @relation(fields: [productId], references: [id])
-  
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+
   @@index([transactionId])
   @@index([productId])
 }
 
-// For split payments
 model PaymentDetail {
-  id              String        @id @default(uuid())
-  transactionId   String
-  paymentMethod   PaymentMethod
-  amount          Decimal       @db.Decimal(10, 2)
-  reference       String?       // Card last 4 digits, mobile money ref, etc
-  createdAt       DateTime      @default(now())
-  
+  id            String        @id @default(uuid())
+  transactionId String
+  paymentMethod PaymentMethod
+  amount        Decimal       @db.Decimal(10, 2)
+  reference     String? // Card reference, M-Pesa code, etc
+  createdAt     DateTime      @default(now())
+
   // Relations
-  transaction     Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
   @@index([transactionId])
 }
 
@@ -297,26 +442,29 @@ model PaymentDetail {
 // ============================================
 
 enum LoyaltyTransactionType {
-  EARNED      // Points earned from purchase
-  REDEEMED    // Points used for discount
-  EXPIRED     // Points expired
-  ADJUSTED    // Manual adjustment
-  BONUS       // Promotional bonus
+  EARNED // Points earned from purchase
+  REDEEMED // Points used for discount
+  EXPIRED // Points expired
+  ADJUSTED // Manual adjustment
+  BONUS // Promotional bonus
 }
 
 model LoyaltyTransaction {
-  id              String                  @id @default(uuid())
-  customerId      String
-  type            LoyaltyTransactionType
-  points          Int                     // Positive for earn, negative for redeem
-  transactionId   String?                 // Link to POS transaction if applicable
-  description     String
-  expiresAt       DateTime?               // Points expiration
-  createdAt       DateTime                @default(now())
-  
+  id            String                 @id @default(uuid())
+  businessId    String                 // Multi-tenant isolation
+  customerId    String
+  type          LoyaltyTransactionType
+  points        Int // Positive for earn, negative for redeem
+  transactionId String? // Link to POS transaction if applicable
+  description   String
+  expiresAt     DateTime? // Points expiration
+  createdAt     DateTime               @default(now())
+
   // Relations
-  customer        Customer                @relation(fields: [customerId], references: [id])
-  
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([businessId])
   @@index([customerId])
   @@index([createdAt])
 }
@@ -331,26 +479,30 @@ enum ShiftStatus {
 }
 
 model Shift {
-  id              String        @id @default(uuid())
-  userId          String
-  shiftNumber     String        @unique // SHIFT-20250101-001
-  
+  id          String @id @default(uuid())
+  businessId  String // Multi-tenant isolation
+  userId      String
+  shiftNumber String // SHIFT-20250101-001
+
   // Cash Management
-  openingCash     Decimal       @db.Decimal(10, 2)
-  closingCash     Decimal?      @db.Decimal(10, 2)
-  expectedCash    Decimal?      @db.Decimal(10, 2)
-  variance        Decimal?      @db.Decimal(10, 2) // Difference between expected and actual
-  
+  openingCash  Decimal  @db.Decimal(10, 2)
+  closingCash  Decimal? @db.Decimal(10, 2)
+  expectedCash Decimal? @db.Decimal(10, 2)
+  variance     Decimal? @db.Decimal(10, 2) // Difference between expected and actual
+
   // Shift Details
-  status          ShiftStatus   @default(OPEN)
-  openedAt        DateTime      @default(now())
-  closedAt        DateTime?
-  notes           String?
-  
+  status   ShiftStatus @default(OPEN)
+  openedAt DateTime    @default(now())
+  closedAt DateTime?
+  notes    String?
+
   // Relations
-  user            User          @relation(fields: [userId], references: [id])
-  transactions    Transaction[]
-  
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+
+  @@unique([businessId, shiftNumber])
+  @@index([businessId])
   @@index([userId])
   @@index([status])
   @@index([openedAt])
@@ -361,22 +513,21 @@ model Shift {
 // ============================================
 
 model SystemConfig {
-  id                    String   @id @default(uuid())
-  key                   String   @unique
-  value                 String
-  description           String?
-  updatedAt             DateTime @updatedAt
-  
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
   @@index([key])
 }
 
-// Configuration for loyalty program rules
+// Configuration for system-wide settings
 // Example keys:
-// - loyalty_points_per_dollar: "10"
-// - loyalty_redemption_rate: "100" (100 points = $1)
-// - tax_rate: "0.15"
-// - currency: "USD"
-// - business_name: "My Store"
+// - default_currency: "$"
+// - default_currency_code: "CAD"
+// - system_timezone: "America/Toronto"
+// - ayende_cx_api_url: "https://api.ayende-cx.com"
 
 // ============================================
 // AUDIT LOG
@@ -394,20 +545,194 @@ enum AuditAction {
 }
 
 model AuditLog {
-  id          String      @id @default(uuid())
-  userId      String?
-  action      AuditAction
-  entityType  String      // User, Product, Transaction, etc
-  entityId    String?
-  changes     String?     @db.Text // JSON string of changes
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime    @default(now())
-  
+  id         String      @id @default(uuid())
+  userId     String?
+  action     AuditAction
+  entityType String // User, Product, Transaction, etc
+  entityId   String?
+  changes    String?     @db.Text // JSON string of changes
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
   // Relations
-  user        User?       @relation(fields: [userId], references: [id])
-  
+  user User? @relation(fields: [userId], references: [id])
+
   @@index([userId])
   @@index([entityType])
   @@index([createdAt])
+}
+
+// ============================================
+// STOCK ADJUSTMENT SYSTEM
+// ============================================
+
+enum AdjustmentType {
+  ADD // Adding stock
+  REMOVE // Removing stock
+  ADJUST // Correcting stock
+}
+
+enum AdjustmentReason {
+  // ADD reasons
+  NEW_STOCK_RECEIVED
+  SUPPLIER_RETURN_CREDIT
+  FOUND_ITEMS
+
+  // REMOVE reasons
+  DAMAGED_GOODS
+  THEFT_SHRINKAGE
+  EXPIRED_ITEMS
+  CUSTOMER_RETURN_DEFECTIVE
+
+  // ADJUST reasons
+  PHYSICAL_COUNT_CORRECTION
+  SYSTEM_ERROR_CORRECTION
+  TRANSFER_CORRECTION
+
+  // Other
+  OTHER
+}
+
+enum AdjustmentStatus {
+  PENDING // Waiting for processing
+  APPROVED // Approved and applied
+  AUTO_APPROVED // Auto-approved (under threshold)
+  REJECTED // Rejected by approver
+  CANCELLED // Cancelled by creator
+}
+
+enum ApprovalStatus {
+  PENDING // Waiting for review
+  APPROVED // Approved
+  REJECTED // Rejected
+}
+
+enum AdjustmentMovementType {
+  ADJUSTMENT // From stock adjustment
+  SALE // From transaction sale
+  PURCHASE // From purchase order
+  TRANSFER // From location transfer
+  RETURN // From customer return
+}
+
+model StockAdjustment {
+  id               String @id @default(uuid())
+  businessId       String // Multi-tenant isolation
+  adjustmentNumber String
+
+  // Product Information
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  // Adjustment Details
+  adjustmentType AdjustmentType
+  quantityBefore Int
+  quantityChange Int
+  quantityAfter  Int
+
+  // Financial Impact
+  unitCost   Decimal @db.Decimal(10, 2)
+  totalValue Decimal @db.Decimal(10, 2)
+
+  // Reason & Notes
+  reason       AdjustmentReason
+  customReason String?
+  notes        String?          @db.Text
+
+  // Approval Status
+  status           AdjustmentStatus @default(PENDING)
+  requiresApproval Boolean          @default(false)
+
+  // User Tracking
+  createdBy  String
+  creator    User    @relation("CreatedAdjustments", fields: [createdBy], references: [id])
+  approvedBy String?
+  approver   User?   @relation("ApprovedAdjustments", fields: [approvedBy], references: [id])
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  // Relations
+  business        Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  approval        StockAdjustmentApproval?
+  movementHistory StockMovementHistory?
+
+  @@unique([businessId, adjustmentNumber])
+  @@index([businessId])
+  @@index([productId])
+  @@index([createdBy])
+  @@index([status])
+  @@index([createdAt])
+  @@map("stock_adjustments")
+}
+
+model StockAdjustmentApproval {
+  id String @id @default(uuid())
+
+  // Adjustment Reference
+  adjustmentId String          @unique
+  adjustment   StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+
+  // Approval Details
+  status     ApprovalStatus @default(PENDING)
+  approvedBy String?
+  approver   User?          @relation(fields: [approvedBy], references: [id])
+
+  // Decision Details
+  decision        String?
+  rejectionReason String? @db.Text
+  approvalNotes   String? @db.Text
+
+  // Timestamps
+  submittedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+
+  @@index([status])
+  @@index([submittedAt])
+  @@map("stock_adjustment_approvals")
+}
+
+model StockMovementHistory {
+  id String @id @default(uuid())
+
+  // Movement Reference
+  movementType  AdjustmentMovementType
+  referenceId   String
+  referenceType String
+
+  // Product Information
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  // Adjustment Reference
+  adjustmentId String?          @unique
+  adjustment   StockAdjustment? @relation(fields: [adjustmentId], references: [id])
+
+  // Movement Details
+  quantityBefore Int
+  quantityChange Int
+  quantityAfter  Int
+
+  // Financial Impact
+  unitCost   Decimal @db.Decimal(10, 2)
+  totalValue Decimal @db.Decimal(10, 2)
+
+  // Context
+  reason String
+  notes  String? @db.Text
+
+  // User Tracking
+  performedBy String
+  performer   User   @relation(fields: [performedBy], references: [id])
+
+  // Timestamp
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([movementType])
+  @@index([createdAt])
+  @@index([performedBy])
+  @@map("stock_movement_history")
 }

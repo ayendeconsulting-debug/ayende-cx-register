@@ -10,6 +10,9 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
 import shiftRoutes from './routes/shiftRoutes.js';
+import stockAdjustmentRoutes from './routes/stockAdjustmentRoutes.js';
+import registrationRoutes from './routes/registration.routes.js';
+import invitationRoutes from './routes/invitation.routes.js';
 
 
 // Load environment variables
@@ -54,6 +57,9 @@ app.use(`/api/${API_VERSION}/categories`, categoryRoutes);
 app.use(`/api/${API_VERSION}/transactions`, transactionRoutes);
 app.use(`/api/${API_VERSION}/customers`, customerRoutes);
 app.use('/api/v1/shifts', shiftRoutes);
+app.use('/api/v1/stock-adjustments', stockAdjustmentRoutes);
+app.use('/api/v1/registration', registrationRoutes);
+app.use('/api/v1/invitations', invitationRoutes);
 
 // 404 handler
 app.use(notFound);

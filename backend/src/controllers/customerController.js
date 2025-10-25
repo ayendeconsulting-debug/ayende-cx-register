@@ -17,7 +17,7 @@ export const getCustomers = asyncHandler(async (req, res) => {
     sortOrder: req.query.sortOrder,
   };
 
-  const result = await customerService.getAllCustomers(filters);
+  const result = await customerService.getAllCustomers(req.user.businessId, filters);
 
   return paginatedResponse(
     res,
@@ -35,7 +35,7 @@ export const getCustomers = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getCustomer = asyncHandler(async (req, res) => {
-  const customer = await customerService.getCustomerById(req.params.id);
+  const customer = await customerService.getCustomerById(req.user.businessId, req.params.id);
   return successResponse(res, customer, 'Customer retrieved successfully');
 });
 
@@ -45,7 +45,7 @@ export const getCustomer = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const createCustomer = asyncHandler(async (req, res) => {
-  const customer = await customerService.createCustomer(req.body, req.user.id);
+  const customer = await customerService.createCustomer(req.user.businessId, req.body, req.user.id);
   return createdResponse(res, customer, 'Customer created successfully');
 });
 
@@ -55,7 +55,7 @@ export const createCustomer = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateCustomer = asyncHandler(async (req, res) => {
-  const customer = await customerService.updateCustomer(req.params.id, req.body, req.user.id);
+  const customer = await customerService.updateCustomer(req.user.businessId, req.params.id, req.body, req.user.id);
   return successResponse(res, customer, 'Customer updated successfully');
 });
 
@@ -65,7 +65,7 @@ export const updateCustomer = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const deleteCustomer = asyncHandler(async (req, res) => {
-  await customerService.deleteCustomer(req.params.id, req.user.id);
+  await customerService.deleteCustomer(req.user.businessId, req.params.id, req.user.id);
   return successResponse(res, null, 'Customer deleted successfully');
 });
 
@@ -75,6 +75,6 @@ export const deleteCustomer = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const searchCustomers = asyncHandler(async (req, res) => {
-  const customers = await customerService.searchCustomer(req.params.term);
+  const customers = await customerService.searchCustomer(req.user.businessId, req.params.term);
   return successResponse(res, customers, 'Search results retrieved successfully');
 });

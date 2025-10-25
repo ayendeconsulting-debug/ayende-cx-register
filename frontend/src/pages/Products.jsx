@@ -13,8 +13,12 @@ import {
   AlertCircle,
   X,
   Scan,
+  TrendingUp,
+  History,
 } from 'lucide-react';
 import QuickActions from '../components/QuickActions';
+import StockAdjustmentForm from '../components/StockAdjustmentForm';
+import StockMovementHistory from '../components/StockMovementHistory';
 
 const Products = () => {
   const { user } = useSelector((state) => state.auth);
@@ -27,6 +31,11 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  
+  // Stock adjustment state
+  const [showAdjustmentForm, setShowAdjustmentForm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -190,6 +199,24 @@ const Products = () => {
     return products.filter((p) => p.stockQuantity <= p.lowStockAlert && p.isActive);
   };
 
+  // Stock adjustment handlers
+  const handleAdjustStock = (product) => {
+    setSelectedProduct(product);
+    setShowAdjustmentForm(true);
+  };
+
+  const handleViewHistory = (product) => {
+    setSelectedProduct(product);
+    setShowHistory(true);
+  };
+
+  const handleAdjustmentSuccess = () => {
+    setShowAdjustmentForm(false);
+    setSelectedProduct(null);
+    loadProducts();
+    toast.success('Stock adjustment created successfully');
+  };
+
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <div className="space-y-6">
@@ -349,6 +376,20 @@ const Products = () => {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleAdjustStock(product)}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Adjust Stock"
+                          >
+                            <TrendingUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleViewHistory(product)}
+                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="View History"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleEdit(product)}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -604,6 +645,30 @@ const Products = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Stock Adjustment Form Modal */}
+      {showAdjustmentForm && (
+        <StockAdjustmentForm
+          product={selectedProduct}
+          onClose={() => {
+            setShowAdjustmentForm(false);
+            setSelectedProduct(null);
+          }}
+          onSuccess={handleAdjustmentSuccess}
+        />
+      )}
+
+      {/* Stock Movement History Modal */}
+      {showHistory && selectedProduct && (
+        <StockMovementHistory
+          isOpen={showHistory}
+          onClose={() => {
+            setShowHistory(false);
+            setSelectedProduct(null);
+          }}
+          product={selectedProduct}
+        />
       )}
 
       <QuickActions />

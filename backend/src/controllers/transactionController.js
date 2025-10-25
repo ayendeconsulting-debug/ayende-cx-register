@@ -8,7 +8,7 @@ import * as transactionService from '../services/transactionService.js';
  * @access  Private (CASHIER, ADMIN)
  */
 export const createTransaction = asyncHandler(async (req, res) => {
-  const transaction = await transactionService.createTransaction(req.body, req.user.id);
+  const transaction = await transactionService.createTransaction(req.body, req.user.id, req.user.businessId);
   return createdResponse(res, transaction, 'Transaction completed successfully');
 });
 
@@ -33,7 +33,7 @@ export const getTransactions = asyncHandler(async (req, res) => {
     sortOrder: req.query.sortOrder,
   };
 
-  const result = await transactionService.getAllTransactions(filters);
+  const result = await transactionService.getAllTransactions(req.user.businessId, filters);
 
   return paginatedResponse(
     res,
@@ -51,7 +51,7 @@ export const getTransactions = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getTransaction = asyncHandler(async (req, res) => {
-  const transaction = await transactionService.getTransactionById(req.params.id);
+  const transaction = await transactionService.getTransactionById(req.params.id, req.user.businessId);
   
   // Cashiers can only view their own transactions
   if (req.user.role === 'CASHIER' && transaction.userId !== req.user.id) {
@@ -70,7 +70,7 @@ export const getTransaction = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getTransactionByNumber = asyncHandler(async (req, res) => {
-  const transaction = await transactionService.getTransactionByNumber(req.params.transactionNumber);
+  const transaction = await transactionService.getTransactionByNumber(req.params.transactionNumber, req.user.businessId);
   
   // Cashiers can only view their own transactions
   if (req.user.role === 'CASHIER' && transaction.userId !== req.user.id) {
@@ -101,7 +101,8 @@ export const voidTransaction = asyncHandler(async (req, res) => {
   const transaction = await transactionService.voidTransaction(
     req.params.id,
     reason,
-    req.user.id
+    req.user.id,
+    req.user.businessId
   );
 
   return successResponse(res, transaction, 'Transaction voided successfully');
@@ -115,7 +116,7 @@ export const voidTransaction = asyncHandler(async (req, res) => {
 export const getSalesSummary = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
   
-  const summary = await transactionService.getSalesSummary(startDate, endDate);
+  const summary = await transactionService.getSalesSummary(req.user.businessId, startDate, endDate);
   
   return successResponse(res, summary, 'Sales summary retrieved successfully');
 });

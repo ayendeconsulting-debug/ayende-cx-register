@@ -3,12 +3,13 @@ import { AppError } from '../middleware/errorHandler.js';
 
 /**
  * Customer Service - Business logic for CRM operations
+ * MULTI-TENANT VERSION - All operations filtered by businessId
  */
 
 /**
  * Get all customers with filters
  */
-export const getAllCustomers = async (filters = {}) => {
+export const getAllCustomers = async (businessId, filters = {}) => {
   const {
     page = 1,
     limit = 20,
@@ -19,7 +20,10 @@ export const getAllCustomers = async (filters = {}) => {
   } = filters;
 
   const skip = (page - 1) * limit;
-  const where = { isActive: true };
+  const where = { 
+    businessId,
+    isActive: true 
+  };
 
   if (search) {
     where.OR = [
@@ -56,9 +60,12 @@ export const getAllCustomers = async (filters = {}) => {
 /**
  * Get customer by ID
  */
-export const getCustomerById = async (id) => {
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+export const getCustomerById = async (businessId, id) => {
+  const customer = await prisma.customer.findFirst({
+    where: { 
+      id,
+      businessId
+    },
     include: {
       transactions: {
         orderBy: { createdAt: 'desc' },
@@ -88,11 +95,14 @@ export const getCustomerById = async (id) => {
 /**
  * Create customer
  */
-export const createCustomer = async (customerData, userId) => {
-  // Check if email already exists
+export const createCustomer = async (businessId, customerData, userId) => {
+  // Check if email already exists in this business
   if (customerData.email) {
-    const existingEmail = await prisma.customer.findUnique({
-      where: { email: customerData.email },
+    const existingEmail = await prisma.customer.findFirst({
+      where: { 
+        email: customerData.email,
+        businessId
+      },
     });
 
     if (existingEmail) {
@@ -100,10 +110,13 @@ export const createCustomer = async (customerData, userId) => {
     }
   }
 
-  // Check if phone already exists
+  // Check if phone already exists in this business
   if (customerData.phone) {
-    const existingPhone = await prisma.customer.findUnique({
-      where: { phone: customerData.phone },
+    const existingPhone = await prisma.customer.findFirst({
+      where: { 
+        phone: customerData.phone,
+        businessId
+      },
     });
 
     if (existingPhone) {
@@ -112,7 +125,10 @@ export const createCustomer = async (customerData, userId) => {
   }
 
   const customer = await prisma.customer.create({
-    data: customerData,
+    data: {
+      businessId,
+      ...customerData
+    },
   });
 
   // Create audit log
@@ -132,9 +148,12 @@ export const createCustomer = async (customerData, userId) => {
 /**
  * Update customer
  */
-export const updateCustomer = async (id, customerData, userId) => {
-  const existingCustomer = await prisma.customer.findUnique({
-    where: { id },
+export const updateCustomer = async (businessId, id, customerData, userId) => {
+  const existingCustomer = await prisma.customer.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!existingCustomer) {
@@ -143,8 +162,11 @@ export const updateCustomer = async (id, customerData, userId) => {
 
   // Check email uniqueness if being changed
   if (customerData.email && customerData.email !== existingCustomer.email) {
-    const emailExists = await prisma.customer.findUnique({
-      where: { email: customerData.email },
+    const emailExists = await prisma.customer.findFirst({
+      where: { 
+        email: customerData.email,
+        businessId
+      },
     });
 
     if (emailExists) {
@@ -154,8 +176,11 @@ export const updateCustomer = async (id, customerData, userId) => {
 
   // Check phone uniqueness if being changed
   if (customerData.phone && customerData.phone !== existingCustomer.phone) {
-    const phoneExists = await prisma.customer.findUnique({
-      where: { phone: customerData.phone },
+    const phoneExists = await prisma.customer.findFirst({
+      where: { 
+        phone: customerData.phone,
+        businessId
+      },
     });
 
     if (phoneExists) {
@@ -188,9 +213,12 @@ export const updateCustomer = async (id, customerData, userId) => {
 /**
  * Delete customer (soft delete)
  */
-export const deleteCustomer = async (id, userId) => {
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+export const deleteCustomer = async (businessId, id, userId) => {
+  const customer = await prisma.customer.findFirst({
+    where: { 
+      id,
+      businessId
+    },
   });
 
   if (!customer) {
@@ -221,9 +249,10 @@ export const deleteCustomer = async (id, userId) => {
 /**
  * Search customers by phone or email
  */
-export const searchCustomer = async (searchTerm) => {
+export const searchCustomer = async (businessId, searchTerm) => {
   const customers = await prisma.customer.findMany({
     where: {
+      businessId,
       isActive: true,
       OR: [
         { email: { contains: searchTerm, mode: 'insensitive' } },

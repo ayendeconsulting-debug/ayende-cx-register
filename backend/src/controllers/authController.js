@@ -16,11 +16,26 @@ import { asyncHandler } from '../middleware/errorHandler.js';
  * @access  Public (but should be restricted in production)
  */
 export const register = asyncHandler(async (req, res) => {
-  const { email, username, password, firstName, lastName, role } = req.body;
+  const { email, username, password, firstName, lastName, role, businessId } = req.body;
 
-  // Check if user exists
+  // businessId is required for multi-tenant
+  if (!businessId) {
+    return errorResponse(res, 'Business ID is required', 400);
+  }
+
+  // Verify business exists and is active
+  const business = await prisma.business.findUnique({
+    where: { id: businessId }
+  });
+
+  if (!business || !business.isActive) {
+    return errorResponse(res, 'Invalid or inactive business', 400);
+  }
+
+  // Check if user exists in this business
   const existingUser = await prisma.user.findFirst({
     where: {
+      businessId,
       OR: [{ email }, { username }],
     },
   });
@@ -28,7 +43,7 @@ export const register = asyncHandler(async (req, res) => {
   if (existingUser) {
     return errorResponse(
       res,
-      'User with this email or username already exists',
+      'User with this email or username already exists in this business',
       400
     );
   }
@@ -39,6 +54,7 @@ export const register = asyncHandler(async (req, res) => {
   // Create user
   const user = await prisma.user.create({
     data: {
+      businessId,
       email,
       username,
       passwordHash,
@@ -48,6 +64,7 @@ export const register = asyncHandler(async (req, res) => {
     },
     select: {
       id: true,
+      businessId: true,
       email: true,
       username: true,
       firstName: true,
@@ -58,7 +75,10 @@ export const register = asyncHandler(async (req, res) => {
   });
 
   // Generate tokens
-  const payload = generateUserPayload(user);
+  const payload = {
+    ...generateUserPayload(user),
+    businessId: user.businessId
+  };
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
 
@@ -77,18 +97,24 @@ export const register = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
 
-  // Find user
-  const user = await prisma.user.findUnique({
-    where: { username },
+  // Find user - use findFirst for multi-tenant (username is no longer globally unique)
+  const user = await prisma.user.findFirst({
+    where: { 
+      username,
+      isActive: true 
+    },
+    include: {
+      business: true // Include business data for currency and settings
+    }
   });
 
   if (!user) {
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
-  // Check if user is active
-  if (!user.isActive) {
-    return errorResponse(res, 'Account is inactive. Please contact administrator.', 401);
+  // Check if user's business is active
+  if (!user.business?.isActive) {
+    return errorResponse(res, 'Business account is inactive. Please contact support.', 401);
   }
 
   // Verify password
@@ -104,8 +130,11 @@ export const login = asyncHandler(async (req, res) => {
     data: { lastLogin: new Date() },
   });
 
-  // Generate tokens
-  const payload = generateUserPayload(user);
+  // Generate tokens with businessId
+  const payload = {
+    ...generateUserPayload(user),
+    businessId: user.businessId // Add businessId to JWT payload
+  };
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
 
@@ -127,6 +156,15 @@ export const login = asyncHandler(async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
+      businessId: user.businessId,
+    },
+    business: {
+      id: user.business.id,
+      name: user.business.businessName,
+      currency: user.business.currency,
+      currencyCode: user.business.currencyCode,
+      taxRate: user.business.taxRate,
+      taxLabel: user.business.taxLabel,
     },
     accessToken,
     refreshToken,
@@ -187,6 +225,7 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
     where: { id: req.user.id },
     select: {
       id: true,
+      businessId: true,
       email: true,
       username: true,
       firstName: true,
@@ -196,6 +235,19 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
       lastLogin: true,
       createdAt: true,
     },
+    include: {
+      business: {
+        select: {
+          id: true,
+          businessName: true,
+          currency: true,
+          currencyCode: true,
+          taxRate: true,
+          taxLabel: true,
+          timezone: true,
+        }
+      }
+    }
   });
 
   return successResponse(res, user, 'User retrieved successfully');
