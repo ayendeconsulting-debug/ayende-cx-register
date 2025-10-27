@@ -75,6 +75,7 @@ export const deleteCustomer = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const searchCustomers = asyncHandler(async (req, res) => {
-  const customers = await customerService.searchCustomer(req.user.businessId, req.params.term);
+  // FIXED: Changed from searchCustomer to searchCustomers (plural)
+  const customers = await customerService.searchCustomers(req.user.businessId, req.params.term);
   return successResponse(res, customers, 'Search results retrieved successfully');
 });

@@ -1,10 +1,105 @@
-import prisma from '../config/database.js';
-import { AppError } from '../middleware/errorHandler.js';
-
 /**
- * Customer Service - Business logic for CRM operations
+ * Customer Service
+ * Business logic for customer operations
  * MULTI-TENANT VERSION - All operations filtered by businessId
  */
+
+import prisma from '../config/database.js';
+import { AppError } from '../middleware/errorHandler.js';
+import { syncCustomerToCRM, fetchCustomerFromCRM } from './crmIntegrationService.js';
+
+/**
+ * Create customer with CRM duplicate check
+ */
+export const createCustomer = async (businessId, customerData) => {
+  try {
+    // Check for duplicate by phone if provided
+    if (customerData.phone) {
+      const existingByPhone = await prisma.customer.findFirst({
+        where: {
+          businessId,
+          phone: customerData.phone,
+          isAnonymous: false,
+        },
+      });
+
+      if (existingByPhone) {
+        throw new AppError('Customer with this phone number already exists', 409);
+      }
+
+      // Check CRM for duplicate
+      const crmCustomer = await fetchCustomerFromCRM(customerData.phone, businessId, 'phone');
+      if (crmCustomer) {
+        throw new AppError('Customer exists in CRM. Please import customer first.', 409);
+      }
+    }
+
+    // Check for duplicate by email if provided
+    if (customerData.email) {
+      const existingByEmail = await prisma.customer.findFirst({
+        where: {
+          businessId,
+          email: customerData.email,
+          isAnonymous: false,
+        },
+      });
+
+      if (existingByEmail) {
+        throw new AppError('Customer with this email already exists', 409);
+      }
+    }
+
+    // Create customer
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        firstName: customerData.firstName,
+        lastName: customerData.lastName,
+        email: customerData.email || null,
+        phone: customerData.phone || null,
+        dateOfBirth: customerData.dateOfBirth ? new Date(customerData.dateOfBirth) : null,
+        address: customerData.address || null,
+        city: customerData.city || null,
+        state: customerData.state || null,
+        zipCode: customerData.zipCode || null,
+        loyaltyPoints: 0,
+        totalSpent: 0,
+        visitCount: 0,
+        loyaltyTier: 'BRONZE',
+        marketingOptIn: customerData.marketingOptIn || false,
+        isActive: true,
+        notes: customerData.notes || null,
+        
+        // Phase 2 fields
+        customerSource: 'POS',
+        syncState: 'PENDING',
+        isAnonymous: false,
+      },
+    });
+
+    // Queue for CRM sync
+    await prisma.syncQueue.create({
+      data: {
+        businessId,
+        entityType: 'customer',
+        entityId: customer.id,
+        operation: 'CREATE',
+        priority: 'NORMAL',
+        status: 'PENDING',
+        payload: {
+          customerId: customer.id,
+        },
+      },
+    });
+
+    console.log(`[CUSTOMER] Customer created: ${customer.id}`);
+
+    return customer;
+  } catch (error) {
+    console.error('[CUSTOMER] Error creating customer:', error);
+    throw error;
+  }
+};
 
 /**
  * Get all customers with filters
@@ -13,17 +108,26 @@ export const getAllCustomers = async (businessId, filters = {}) => {
   const {
     page = 1,
     limit = 20,
-    search = '',
+    search,
     loyaltyTier,
-    sortBy = 'lastName',
-    sortOrder = 'asc',
+    isActive = true,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
+    includeAnonymous = false,
   } = filters;
 
   const skip = (page - 1) * limit;
   const where = { 
     businessId,
-    isActive: true 
+    isActive: isActive === 'all' ? undefined : isActive 
   };
+
+  // Filter out anonymous customers by default
+  if (!includeAnonymous) {
+    where.isAnonymous = false;
+  }
+
+  if (loyaltyTier) where.loyaltyTier = loyaltyTier;
 
   if (search) {
     where.OR = [
@@ -34,16 +138,30 @@ export const getAllCustomers = async (businessId, filters = {}) => {
     ];
   }
 
-  if (loyaltyTier) {
-    where.loyaltyTier = loyaltyTier;
-  }
-
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({
       where,
       skip: parseInt(skip),
       take: parseInt(limit),
       orderBy: { [sortBy]: sortOrder },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        loyaltyPoints: true,
+        loyaltyTier: true,
+        totalSpent: true,
+        visitCount: true,
+        lastVisit: true,
+        memberSince: true,
+        isActive: true,
+        isAnonymous: true,
+        customerSource: true,
+        syncState: true,
+        createdAt: true,
+      },
     }),
     prisma.customer.count({ where }),
   ]);
@@ -62,14 +180,14 @@ export const getAllCustomers = async (businessId, filters = {}) => {
  */
 export const getCustomerById = async (businessId, id) => {
   const customer = await prisma.customer.findFirst({
-    where: { 
+    where: {
       id,
-      businessId
+      businessId,
     },
     include: {
       transactions: {
-        orderBy: { createdAt: 'desc' },
         take: 10,
+        orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           transactionNumber: true,
@@ -78,9 +196,9 @@ export const getCustomerById = async (businessId, id) => {
           status: true,
         },
       },
-      loyaltyHistory: {
-        orderBy: { createdAt: 'desc' },
+      loyaltyTransactions: {
         take: 10,
+        orderBy: { createdAt: 'desc' },
       },
     },
   });
@@ -88,59 +206,6 @@ export const getCustomerById = async (businessId, id) => {
   if (!customer) {
     throw new AppError('Customer not found', 404);
   }
-
-  return customer;
-};
-
-/**
- * Create customer
- */
-export const createCustomer = async (businessId, customerData, userId) => {
-  // Check if email already exists in this business
-  if (customerData.email) {
-    const existingEmail = await prisma.customer.findFirst({
-      where: { 
-        email: customerData.email,
-        businessId
-      },
-    });
-
-    if (existingEmail) {
-      throw new AppError('Customer with this email already exists', 400);
-    }
-  }
-
-  // Check if phone already exists in this business
-  if (customerData.phone) {
-    const existingPhone = await prisma.customer.findFirst({
-      where: { 
-        phone: customerData.phone,
-        businessId
-      },
-    });
-
-    if (existingPhone) {
-      throw new AppError('Customer with this phone number already exists', 400);
-    }
-  }
-
-  const customer = await prisma.customer.create({
-    data: {
-      businessId,
-      ...customerData
-    },
-  });
-
-  // Create audit log
-  await prisma.auditLog.create({
-    data: {
-      userId,
-      action: 'CREATE',
-      entityType: 'Customer',
-      entityId: customer.id,
-      changes: JSON.stringify(customer),
-    },
-  });
 
   return customer;
 };
@@ -148,76 +213,11 @@ export const createCustomer = async (businessId, customerData, userId) => {
 /**
  * Update customer
  */
-export const updateCustomer = async (businessId, id, customerData, userId) => {
-  const existingCustomer = await prisma.customer.findFirst({
-    where: { 
-      id,
-      businessId
-    },
-  });
-
-  if (!existingCustomer) {
-    throw new AppError('Customer not found', 404);
-  }
-
-  // Check email uniqueness if being changed
-  if (customerData.email && customerData.email !== existingCustomer.email) {
-    const emailExists = await prisma.customer.findFirst({
-      where: { 
-        email: customerData.email,
-        businessId
-      },
-    });
-
-    if (emailExists) {
-      throw new AppError('Email already in use', 400);
-    }
-  }
-
-  // Check phone uniqueness if being changed
-  if (customerData.phone && customerData.phone !== existingCustomer.phone) {
-    const phoneExists = await prisma.customer.findFirst({
-      where: { 
-        phone: customerData.phone,
-        businessId
-      },
-    });
-
-    if (phoneExists) {
-      throw new AppError('Phone number already in use', 400);
-    }
-  }
-
-  const customer = await prisma.customer.update({
-    where: { id },
-    data: customerData,
-  });
-
-  // Create audit log
-  await prisma.auditLog.create({
-    data: {
-      userId,
-      action: 'UPDATE',
-      entityType: 'Customer',
-      entityId: id,
-      changes: JSON.stringify({
-        before: existingCustomer,
-        after: customer,
-      }),
-    },
-  });
-
-  return customer;
-};
-
-/**
- * Delete customer (soft delete)
- */
-export const deleteCustomer = async (businessId, id, userId) => {
+export const updateCustomer = async (businessId, id, updateData) => {
   const customer = await prisma.customer.findFirst({
-    where: { 
+    where: {
       id,
-      businessId
+      businessId,
     },
   });
 
@@ -225,42 +225,210 @@ export const deleteCustomer = async (businessId, id, userId) => {
     throw new AppError('Customer not found', 404);
   }
 
-  const deletedCustomer = await prisma.customer.update({
-    where: { id },
-    data: { isActive: false },
-  });
+  // Don't allow updating anonymous customers' core fields
+  if (customer.isAnonymous) {
+    throw new AppError('Cannot update anonymous customer', 400);
+  }
 
-  // Create audit log
-  await prisma.auditLog.create({
+  // Check for duplicate email if being updated
+  if (updateData.email && updateData.email !== customer.email) {
+    const existingEmail = await prisma.customer.findFirst({
+      where: {
+        businessId,
+        email: updateData.email,
+        id: { not: id },
+      },
+    });
+
+    if (existingEmail) {
+      throw new AppError('Email already in use by another customer', 409);
+    }
+  }
+
+  // Check for duplicate phone if being updated
+  if (updateData.phone && updateData.phone !== customer.phone) {
+    const existingPhone = await prisma.customer.findFirst({
+      where: {
+        businessId,
+        phone: updateData.phone,
+        id: { not: id },
+      },
+    });
+
+    if (existingPhone) {
+      throw new AppError('Phone already in use by another customer', 409);
+    }
+  }
+
+  const updatedCustomer = await prisma.customer.update({
+    where: { id },
     data: {
-      userId,
-      action: 'DELETE',
-      entityType: 'Customer',
-      entityId: id,
-      changes: JSON.stringify({
-        name: `${customer.firstName} ${customer.lastName}`,
-      }),
+      ...updateData,
+      dateOfBirth: updateData.dateOfBirth ? new Date(updateData.dateOfBirth) : undefined,
+      syncState: 'PENDING', // Mark for sync
     },
   });
 
-  return deletedCustomer;
+  // Queue for CRM sync
+  await prisma.syncQueue.create({
+    data: {
+      businessId,
+      entityType: 'customer',
+      entityId: id,
+      operation: 'UPDATE',
+      priority: 'NORMAL',
+      status: 'PENDING',
+      payload: {
+        customerId: id,
+        updatedFields: Object.keys(updateData),
+      },
+    },
+  });
+
+  console.log(`[CUSTOMER] Customer updated: ${id}`);
+
+  return updatedCustomer;
+};
+
+/**
+ * Delete (deactivate) customer
+ */
+export const deleteCustomer = async (businessId, id) => {
+  const customer = await prisma.customer.findFirst({
+    where: {
+      id,
+      businessId,
+    },
+  });
+
+  if (!customer) {
+    throw new AppError('Customer not found', 404);
+  }
+
+  if (customer.isAnonymous) {
+    throw new AppError('Cannot delete anonymous customer', 400);
+  }
+
+  // Soft delete - just deactivate
+  const deactivated = await prisma.customer.update({
+    where: { id },
+    data: {
+      isActive: false,
+      syncState: 'PENDING',
+    },
+  });
+
+  // Queue for CRM sync
+  await prisma.syncQueue.create({
+    data: {
+      businessId,
+      entityType: 'customer',
+      entityId: id,
+      operation: 'DELETE',
+      priority: 'NORMAL',
+      status: 'PENDING',
+      payload: {
+        customerId: id,
+      },
+    },
+  });
+
+  console.log(`[CUSTOMER] Customer deactivated: ${id}`);
+
+  return deactivated;
+};
+
+/**
+ * Get customer analytics
+ */
+export const getCustomerAnalytics = async (businessId) => {
+  const [totalCustomers, activeCustomers, loyaltyBreakdown, topSpenders] = await Promise.all([
+    prisma.customer.count({
+      where: {
+        businessId,
+        isAnonymous: false,
+      },
+    }),
+    prisma.customer.count({
+      where: {
+        businessId,
+        isActive: true,
+        isAnonymous: false,
+      },
+    }),
+    prisma.customer.groupBy({
+      by: ['loyaltyTier'],
+      where: {
+        businessId,
+        isAnonymous: false,
+      },
+      _count: true,
+    }),
+    prisma.customer.findMany({
+      where: {
+        businessId,
+        isAnonymous: false,
+      },
+      orderBy: {
+        totalSpent: 'desc',
+      },
+      take: 10,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        totalSpent: true,
+        visitCount: true,
+        loyaltyTier: true,
+      },
+    }),
+  ]);
+
+  return {
+    totalCustomers,
+    activeCustomers,
+    loyaltyBreakdown,
+    topSpenders,
+  };
 };
 
 /**
  * Search customers by phone or email
  */
-export const searchCustomer = async (businessId, searchTerm) => {
+export const searchCustomers = async (businessId, query) => {
   const customers = await prisma.customer.findMany({
     where: {
       businessId,
-      isActive: true,
+      isAnonymous: false,
       OR: [
-        { email: { contains: searchTerm, mode: 'insensitive' } },
-        { phone: { contains: searchTerm } },
+        { phone: { contains: query } },
+        { email: { contains: query, mode: 'insensitive' } },
+        { firstName: { contains: query, mode: 'insensitive' } },
+        { lastName: { contains: query, mode: 'insensitive' } },
       ],
     },
     take: 10,
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      loyaltyPoints: true,
+      loyaltyTier: true,
+    },
   });
 
   return customers;
+};
+
+export default {
+  createCustomer,
+  getAllCustomers,
+  getCustomerById,
+  updateCustomer,
+  deleteCustomer,
+  getCustomerAnalytics,
+  searchCustomers,
 };

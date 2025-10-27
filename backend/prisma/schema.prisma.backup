@@ -1,0 +1,676 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                                                   String                       @id @default(uuid())
+  email                                                String
+  username                                             String
+  passwordHash                                         String
+  firstName                                            String
+  lastName                                             String
+  role                                                 UserRole                     @default(CASHIER)
+  isActive                                             Boolean                      @default(true)
+  lastLogin                                            DateTime?
+  createdAt                                            DateTime                     @default(now())
+  updatedAt                                            DateTime                     @updatedAt
+  businessId                                           String
+  auditLogs                                            AuditLog[]
+  shifts                                               Shift[]
+  transactions                                         Transaction[]
+  business                                             Business                     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  UserInvitation                                       UserInvitation[]
+  stock_adjustment_approvals                           stock_adjustment_approvals[]
+  stock_adjustments_stock_adjustments_approvedByToUser stock_adjustments[]          @relation("stock_adjustments_approvedByToUser")
+  stock_adjustments_stock_adjustments_createdByToUser  stock_adjustments[]          @relation("stock_adjustments_createdByToUser")
+  stock_movement_history                               stock_movement_history[]
+
+  @@unique([businessId, email])
+  @@unique([businessId, username])
+  @@index([businessId])
+  @@index([email])
+  @@index([username])
+}
+
+model Business {
+  id                     String                  @id @default(uuid())
+  externalTenantId       String?                 @unique
+  businessName           String
+  businessAddress        String?
+  businessCity           String?
+  businessState          String?
+  businessZipCode        String?
+  businessCountry        String?
+  businessPhone          String?
+  businessEmail          String?
+  businessWebsite        String?
+  logoUrl                String?
+  primaryColor           String?                 @default("#3B82F6")
+  secondaryColor         String?                 @default("#10B981")
+  currency               String                  @default("$")
+  currencyCode           String                  @default("USD")
+  timezone               String                  @default("America/Toronto")
+  dateFormat             String                  @default("MM/DD/YYYY")
+  timeFormat             String                  @default("12")
+  taxEnabled             Boolean                 @default(true)
+  taxRate                Decimal                 @default(0.00) @db.Decimal(5, 4)
+  taxLabel               String                  @default("Tax")
+  taxNumber              String?
+  receiptHeader          String?
+  receiptFooter          String?
+  loyaltyEnabled         Boolean                 @default(true)
+  isActive               Boolean                 @default(true)
+  subscriptionTier       String?                 @default("BASIC")
+  subscriptionExpiry     DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  lastSyncedAt           DateTime?               @db.Timestamp(6)
+  syncStatus             SyncStatus?             @default(ACTIVE)
+  categories             Category[]
+  customers              Customer[]
+  loyaltyReconciliations LoyaltyReconciliation[]
+  loyaltyTransactions    LoyaltyTransaction[]
+  products               Product[]
+  shifts                 Shift[]
+  SystemMapping          SystemMapping[]
+  transactions           Transaction[]
+  users                  User[]
+  UserInvitation         UserInvitation[]
+  stock_adjustments      stock_adjustments[]
+  sync_logs              sync_logs[]
+
+  @@index([businessName])
+  @@index([externalTenantId])
+}
+
+model Customer {
+  id                  String                  @id @default(uuid())
+  firstName           String
+  lastName            String
+  email               String?
+  phone               String?
+  dateOfBirth         DateTime?
+  loyaltyPoints       Int                     @default(0)
+  totalSpent          Decimal                 @default(0) @db.Decimal(10, 2)
+  visitCount          Int                     @default(0)
+  lastVisit           DateTime?
+  memberSince         DateTime                @default(now())
+  loyaltyTier         LoyaltyTier             @default(BRONZE)
+  address             String?
+  city                String?
+  state               String?
+  zipCode             String?
+  marketingOptIn      Boolean                 @default(false)
+  isActive            Boolean                 @default(true)
+  notes               String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  businessId          String
+  externalId          String?
+  lastSyncedAt        DateTime?
+  syncStatus          SyncStatus?             @default(ACTIVE)
+  customerSource      CustomerSource?         @default(POS)
+  syncState           CustomerSyncState?      @default(PENDING)
+  lastRefreshedAt     DateTime?               @db.Timestamp(6)
+  syncRetryCount      Int?                    @default(0)
+  syncError           String?
+  needsEnrichment     Boolean?                @default(false)
+  isAnonymous         Boolean?                @default(false)
+  loyaltyPointsLocal  Int?                    @default(0)
+  loyaltyPointsCRM    Int?
+  loyaltyLastSyncedAt DateTime?               @db.Timestamp(6)
+  business            Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  reconciliations     LoyaltyReconciliation[]
+  loyaltyTransactions LoyaltyTransaction[]
+  transactions        Transaction[]
+
+  @@unique([businessId, email])
+  @@unique([businessId, phone])
+  @@index([businessId])
+  @@index([email])
+  @@index([loyaltyTier])
+  @@index([externalId])
+  @@index([phone])
+  @@index([isAnonymous])
+  @@index([syncState])
+  @@index([customerSource])
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@index([name])
+}
+
+model Product {
+  id                     String                   @id @default(uuid())
+  sku                    String
+  name                   String
+  description            String?
+  categoryId             String
+  price                  Decimal                  @db.Decimal(10, 2)
+  costPrice              Decimal?                 @db.Decimal(10, 2)
+  stockQuantity          Int                      @default(0)
+  lowStockAlert          Int                      @default(10)
+  unit                   String                   @default("unit")
+  barcode                String?
+  imageUrl               String?
+  isActive               Boolean                  @default(true)
+  isTaxable              Boolean                  @default(true)
+  loyaltyPoints          Int                      @default(0)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  businessId             String
+  currency               String                   @default("$")
+  currencyCode           String                   @default("USD")
+  business               Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category               Category                 @relation(fields: [categoryId], references: [id])
+  stockMovements         StockMovement[]
+  transactionItems       TransactionItem[]
+  stock_adjustments      stock_adjustments[]
+  stock_movement_history stock_movement_history[]
+
+  @@unique([businessId, barcode])
+  @@unique([businessId, sku])
+  @@index([businessId])
+  @@index([categoryId])
+  @@index([barcode])
+  @@index([name])
+  @@index([sku])
+}
+
+model Transaction {
+  id                    String            @id @default(uuid())
+  transactionNumber     String
+  customerId            String?
+  userId                String
+  subtotal              Decimal           @db.Decimal(10, 2)
+  taxAmount             Decimal           @db.Decimal(10, 2)
+  discountAmount        Decimal           @default(0) @db.Decimal(10, 2)
+  total                 Decimal           @db.Decimal(10, 2)
+  paymentMethod         PaymentMethod
+  amountPaid            Decimal           @db.Decimal(10, 2)
+  changeGiven           Decimal           @default(0) @db.Decimal(10, 2)
+  loyaltyPointsEarned   Int               @default(0)
+  loyaltyPointsRedeemed Int               @default(0)
+  status                TransactionStatus @default(COMPLETED)
+  voidReason            String?
+  shiftId               String?
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  businessId            String
+  currency              String            @default("$")
+  currencyCode          String            @default("CAD")
+  externalId            String?
+  syncedAt              DateTime?
+  syncedToCRM           Boolean           @default(false)
+  syncedToCrm           Boolean?          @default(false)
+  syncStatus            SyncStatus?       @default(PENDING)
+  StockMovement         StockMovement[]
+  business              Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer              Customer?         @relation(fields: [customerId], references: [id])
+  shift                 Shift?            @relation(fields: [shiftId], references: [id])
+  user                  User              @relation(fields: [userId], references: [id])
+  items                 TransactionItem[]
+
+  @@unique([businessId, transactionNumber])
+  @@index([businessId])
+  @@index([customerId])
+  @@index([userId])
+  @@index([shiftId])
+  @@index([createdAt])
+  @@index([externalId])
+  @@index([status])
+  @@index([syncedToCRM])
+  @@index([syncedToCrm])
+}
+
+model TransactionItem {
+  id            String      @id @default(uuid())
+  transactionId String
+  productId     String
+  productName   String
+  sku           String
+  quantity      Int
+  unitPrice     Decimal     @db.Decimal(10, 2)
+  subtotal      Decimal     @db.Decimal(10, 2)
+  discount      Decimal     @default(0) @db.Decimal(10, 2)
+  tax           Decimal     @db.Decimal(10, 2)
+  total         Decimal     @db.Decimal(10, 2)
+  createdAt     DateTime    @default(now())
+  currency      String      @default("$")
+  currencyCode  String      @default("CAD")
+  product       Product     @relation(fields: [productId], references: [id])
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([productId])
+}
+
+model LoyaltyTransaction {
+  id            String                 @id @default(uuid())
+  customerId    String
+  type          LoyaltyTransactionType
+  points        Int
+  transactionId String?
+  description   String
+  expiresAt     DateTime?
+  createdAt     DateTime               @default(now())
+  businessId    String
+  business      Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer      Customer               @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([businessId])
+  @@index([createdAt])
+}
+
+model Shift {
+  id           String        @id @default(uuid())
+  userId       String
+  shiftNumber  String
+  openingCash  Decimal       @db.Decimal(10, 2)
+  closingCash  Decimal?      @db.Decimal(10, 2)
+  expectedCash Decimal?      @db.Decimal(10, 2)
+  variance     Decimal?      @db.Decimal(10, 2)
+  status       ShiftStatus   @default(OPEN)
+  openedAt     DateTime      @default(now())
+  closedAt     DateTime?
+  notes        String?
+  businessId   String
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+
+  @@unique([businessId, shiftNumber])
+  @@index([userId])
+  @@index([businessId])
+  @@index([status])
+  @@index([openedAt])
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  productId     String
+  quantity      Int
+  previousStock Int
+  newStock      Int
+  reference     String?
+  notes         String?
+  createdAt     DateTime          @default(now())
+  movementType  StockMovementType
+  transactionId String?
+  product       Product           @relation(fields: [productId], references: [id])
+  transaction   Transaction?      @relation(fields: [transactionId], references: [id])
+
+  @@index([productId])
+  @@index([transactionId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  action     AuditAction
+  entityType String
+  entityId   String?
+  changes    String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+  user       User?       @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model UserInvitation {
+  id              String           @id @default(uuid())
+  businessId      String
+  email           String
+  firstName       String
+  lastName        String
+  role            UserRole
+  invitationToken String           @unique
+  expiresAt       DateTime
+  invitedBy       String
+  message         String?
+  status          InvitationStatus @default(PENDING)
+  acceptedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime
+  business        Business         @relation(fields: [businessId], references: [id])
+  inviter         User             @relation(fields: [invitedBy], references: [id])
+
+  @@index([businessId])
+  @@index([email])
+  @@index([status])
+  @@index([invitationToken])
+}
+
+model stock_adjustments {
+  id                                      String                      @id @default(uuid())
+  adjustmentNumber                        String
+  productId                               String
+  adjustmentType                          AdjustmentType
+  quantityBefore                          Int
+  quantityChange                          Int
+  quantityAfter                           Int
+  unitCost                                Decimal                     @db.Decimal(10, 2)
+  totalValue                              Decimal                     @db.Decimal(10, 2)
+  reason                                  AdjustmentReason
+  customReason                            String?
+  notes                                   String?
+  status                                  AdjustmentStatus            @default(PENDING)
+  requiresApproval                        Boolean                     @default(false)
+  createdBy                               String
+  approvedBy                              String?
+  createdAt                               DateTime                    @default(now())
+  processedAt                             DateTime?
+  businessId                              String
+  stock_adjustment_approvals              stock_adjustment_approvals?
+  User_stock_adjustments_approvedByToUser User?                       @relation("stock_adjustments_approvedByToUser", fields: [approvedBy], references: [id])
+  business                                Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  User_stock_adjustments_createdByToUser  User                        @relation("stock_adjustments_createdByToUser", fields: [createdBy], references: [id])
+  Product                                 Product                     @relation(fields: [productId], references: [id])
+  stock_movement_history                  stock_movement_history?
+
+  @@unique([businessId, adjustmentNumber])
+  @@index([businessId])
+  @@index([productId])
+  @@index([createdBy])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model stock_adjustment_approvals {
+  id                String            @id @default(uuid())
+  adjustmentId      String            @unique
+  status            ApprovalStatus    @default(PENDING)
+  approvedBy        String?
+  decision          String?
+  rejectionReason   String?
+  approvalNotes     String?
+  submittedAt       DateTime          @default(now())
+  reviewedAt        DateTime?
+  stock_adjustments stock_adjustments @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  User              User?             @relation(fields: [approvedBy], references: [id])
+
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model stock_movement_history {
+  id                String                 @id @default(uuid())
+  movementType      AdjustmentMovementType
+  referenceId       String
+  referenceType     String
+  productId         String
+  adjustmentId      String?                @unique
+  quantityBefore    Int
+  quantityChange    Int
+  quantityAfter     Int
+  unitCost          Decimal                @db.Decimal(10, 2)
+  totalValue        Decimal                @db.Decimal(10, 2)
+  reason            String
+  notes             String?
+  performedBy       String
+  createdAt         DateTime               @default(now())
+  stock_adjustments stock_adjustments?     @relation(fields: [adjustmentId], references: [id])
+  User              User                   @relation(fields: [performedBy], references: [id])
+  Product           Product                @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([performedBy])
+  @@index([createdAt])
+  @@index([movementType])
+}
+
+model SystemMapping {
+  id           String            @id @default(uuid())
+  entityType   EntityMappingType
+  posId        String
+  crmId        String
+  businessId   String
+  lastSyncedAt DateTime          @default(now()) @db.Timestamp(6)
+  syncStatus   SyncStatus        @default(ACTIVE)
+  metadata     Json?
+  createdAt    DateTime          @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime          @default(now()) @updatedAt @db.Timestamp(6)
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([entityType, crmId])
+  @@unique([entityType, posId])
+  @@index([businessId])
+  @@index([entityType, syncStatus])
+}
+
+model sync_logs {
+  id           String     @id @default(uuid())
+  businessId   String
+  operation    String
+  direction    String
+  entityType   String
+  entityId     String
+  status       SyncStatus @default(PENDING)
+  attemptCount Int        @default(1)
+  errorMessage String?
+  payload      String
+  response     String?
+  createdAt    DateTime   @default(now())
+  completedAt  DateTime?
+  nextRetryAt  DateTime?
+  business     Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+model LoyaltyReconciliation {
+  id         String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  customerId String
+  businessId String
+  posPoints  Int
+  crmPoints  Int
+  difference Int
+  status     String?   @default("PENDING")
+  resolvedBy String?
+  resolvedAt DateTime? @db.Timestamp(6)
+  resolution String?
+  notes      String?
+  detectedAt DateTime? @default(now()) @db.Timestamp(6)
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status])
+  @@index([customerId])
+  @@index([detectedAt])
+}
+
+model SystemConfig {
+  id          String   @id
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime
+
+  @@index([key])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  CASHIER
+  INVENTORY_MANAGER
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_MONEY
+  BANK_TRANSFER
+  LOYALTY_POINTS
+  SPLIT
+  MOBILE
+  OTHER
+}
+
+enum LoyaltyTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  RETURN
+  DAMAGE
+  TRANSFER
+  WRITE_OFF
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum SyncStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  RETRY_SCHEDULED
+  ACTIVE
+  ARCHIVED
+}
+
+enum AdjustmentMovementType {
+  ADJUSTMENT
+  SALE
+  PURCHASE
+  TRANSFER
+  RETURN
+}
+
+enum AdjustmentReason {
+  NEW_STOCK_RECEIVED
+  SUPPLIER_RETURN_CREDIT
+  FOUND_ITEMS
+  DAMAGED_GOODS
+  THEFT_SHRINKAGE
+  EXPIRED_ITEMS
+  CUSTOMER_RETURN_DEFECTIVE
+  PHYSICAL_COUNT_CORRECTION
+  SYSTEM_ERROR_CORRECTION
+  TRANSFER_CORRECTION
+  OTHER
+}
+
+enum AdjustmentStatus {
+  PENDING
+  APPROVED
+  AUTO_APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum AdjustmentType {
+  ADD
+  REMOVE
+  ADJUST
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VOID_TRANSACTION
+  REFUND
+  STOCK_ADJUSTMENT
+}
+
+enum LoyaltyTransactionType {
+  EARNED
+  REDEEMED
+  EXPIRED
+  ADJUSTED
+  BONUS
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  VOID
+  REFUNDED
+}
+
+enum EntityMappingType {
+  CUSTOMER
+  BUSINESS
+  TRANSACTION
+}
+
+enum CustomerSource {
+  CRM
+  POS
+  ANONYMOUS
+}
+
+enum CustomerSyncState {
+  SYNCED
+  PENDING
+  CONFLICT
+  FAILED
+}
+
+enum SyncPriority {
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  RETRY
+}

@@ -8,7 +8,12 @@ import * as transactionService from '../services/transactionService.js';
  * @access  Private (CASHIER, ADMIN)
  */
 export const createTransaction = asyncHandler(async (req, res) => {
-  const transaction = await transactionService.createTransaction(req.body, req.user.id, req.user.businessId);
+  // FIXED: Pass parameters in correct order (businessId, transactionData, userId)
+  const transaction = await transactionService.createTransaction(
+    req.user.businessId,
+    req.body,
+    req.user.id
+  );
   return createdResponse(res, transaction, 'Transaction completed successfully');
 });
 
@@ -51,7 +56,8 @@ export const getTransactions = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getTransaction = asyncHandler(async (req, res) => {
-  const transaction = await transactionService.getTransactionById(req.params.id, req.user.businessId);
+  // FIXED: Pass businessId first
+  const transaction = await transactionService.getTransactionById(req.user.businessId, req.params.id);
   
   // Cashiers can only view their own transactions
   if (req.user.role === 'CASHIER' && transaction.userId !== req.user.id) {

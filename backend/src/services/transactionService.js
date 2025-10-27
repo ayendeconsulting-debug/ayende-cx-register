@@ -1,367 +1,212 @@
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
+// ============================================
+// 🔗 INTEGRATION: Phase 2D - Queue-based sync
+// ============================================
+import syncQueueService from './syncQueueService.js';
+import { handleWalkInCustomer } from './walkInService.js';
 
 /**
- * Transaction Service - Business logic for POS transactions
+ * Transaction Service - Business logic for CRM operations
+ * MULTI-TENANT VERSION - All operations filtered by businessId
  */
 
 /**
- * Generate unique transaction number
- * Format: TXN-YYYYMMDD-XXX
+ * Create transaction
  */
-const generateTransactionNumber = async (businessId) => {
-  const today = new Date();
-  const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+export const createTransaction = async (businessId, transactionData, userId) => {
+  // ============================================
+  // PHASE 2B: Handle walk-in customer
+  // ============================================
+  let customerId = transactionData.customerId;
   
-  // Find the last transaction with today's date prefix to get the next sequence number
-  const lastTransaction = await prisma.transaction.findFirst({
-    where:  {
-       businessId,
-      transactionNumber: {
-        startsWith: `TXN-${dateStr}`,
-      },
-    },
-    orderBy: {
-      transactionNumber: 'desc',
-    },
-  });
-  
-  let sequence = 1;
-  if (lastTransaction) {
-    // Extract the sequence number from the last transaction
-    const lastSequence = parseInt(lastTransaction.transactionNumber.split('-')[2]);
-    sequence = lastSequence + 1;
-  }
-  
-  const sequenceStr = String(sequence).padStart(3, '0');
-  return `TXN-${dateStr}-${sequenceStr}`;
-};
-
-/**
- * Calculate transaction totals
- */
-const calculateTransactionTotals = (items, taxRate, discountAmount = 0, loyaltyPointsRedeemed = 0, loyaltyRedemptionRate = 100) => {
-  // Calculate subtotal from items
-  const subtotal = items.reduce((sum, item) => {
-    return sum + (parseFloat(item.unitPrice) * item.quantity);
-  }, 0);
-  
-  // Calculate tax on taxable items
-  const taxAmount = items.reduce((sum, item) => {
-    if (item.isTaxable) {
-      const itemSubtotal = parseFloat(item.unitPrice) * item.quantity;
-      return sum + (itemSubtotal * taxRate);
-    }
-    return sum;
-  }, 0);
-  
-  // Calculate loyalty discount (points to dollar)
-  const loyaltyDiscount = loyaltyPointsRedeemed / loyaltyRedemptionRate;
-  
-  // Total discount
-  const totalDiscount = parseFloat(discountAmount) + loyaltyDiscount;
-  
-  // Calculate total
-  const total = subtotal + taxAmount - totalDiscount;
-  
-  return {
-    subtotal: parseFloat(subtotal.toFixed(2)),
-    taxAmount: parseFloat(taxAmount.toFixed(2)),
-    discountAmount: parseFloat(totalDiscount.toFixed(2)),
-    total: parseFloat(Math.max(0, total).toFixed(2)), // Ensure not negative
-  };
-};
-
-/**
- * Calculate loyalty points earned
- */
-const calculateLoyaltyPointsEarned = (items, pointsPerDollar = 10) => {
-  const subtotal = items.reduce((sum, item) => {
-    return sum + (parseFloat(item.unitPrice) * item.quantity);
-  }, 0);
-  
-  // Points from purchase amount only (product-specific loyalty points removed)
-  const purchasePoints = Math.floor(subtotal * pointsPerDollar);
-  
-  return purchasePoints;
-};
-
-/**
- * Create a new transaction (sale)
- */
-export const createTransaction = async (transactionData, userId, businessId) => {
-  const {
-    customerId,
-    items,
-    paymentMethod,
-    amountPaid,
-    discountAmount = 0,
-    loyaltyPointsRedeemed = 0,
-    notes,
-    shiftId,
-  } = transactionData;
-
-  // Get business for currency and tax settings
-  const business = await prisma.business.findUnique({
-    where: { id: businessId },
-    select: {
-      currency: true,
-      currencyCode: true,
-      taxRate: true,
-      taxEnabled: true
-    }
-  });
-
-  if (!business) {
-    throw new AppError('Business not found', 404);
-  }
-
-  // Use business tax rate instead of system config
-  const taxRate = business.taxEnabled ? parseFloat(business.taxRate) : 0;
- 
-  // Validate items
-  if (!items || items.length === 0) {
-    throw new AppError('Transaction must have at least one item', 400);
-  }
-
-  // // Get loyalty configuration
-  const [loyaltyPointsConfig, loyaltyRedemptionConfig] = await Promise.all([
-    prisma.systemConfig.findUnique({ where: { key: 'loyalty_points_per_dollar' } }),
-    prisma.systemConfig.findUnique({ where: { key: 'loyalty_redemption_rate' } }),
-  ]);
-
-  const pointsPerDollar = parseInt(loyaltyPointsConfig?.value || '10');
-  const loyaltyRedemptionRate = parseInt(loyaltyRedemptionConfig?.value || '100');
-
-  // Fetch product details and validate stock
-  const productIds = items.map(item => item.productId);
-  const products = await prisma.product.findMany({
-    where: { 
-      id: { in: productIds },
-      businessId
-    },
-  });
-
-  if (products.length !== productIds.length) {
-    throw new AppError('One or more products not found', 404);
-  }
-
-  // Build transaction items with product details
-  const transactionItems = items.map(item => {
-    const product = products.find(p => p.id === item.productId);
+  // If no customerId but customerInfo provided, handle walk-in
+  if (!customerId && transactionData.customerInfo) {
+    console.log('[TRANSACTION] Processing walk-in customer');
     
-    if (!product) {
-      throw new AppError(`Product ${item.productId} not found`, 404);
-    }
-
-    if (!product.isActive) {
-      throw new AppError(`Product ${product.name} is not available`, 400);
-    }
-
-    if (product.stockQuantity < item.quantity) {
-      throw new AppError(
-        `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`,
-        400
-      );
-    }
-
-    const unitPrice = parseFloat(product.price);
-    const quantity = parseInt(item.quantity);
-    const itemSubtotal = unitPrice * quantity;
-    const itemDiscount = parseFloat(item.discount || 0);
-    const itemTax = product.isTaxable ? (itemSubtotal - itemDiscount) * taxRate : 0;
-    const itemTotal = itemSubtotal - itemDiscount + itemTax;
-
-    return {
-      productId: product.id,
-      productName: product.name,
-      sku: product.sku,
-      quantity,
-      unitPrice,
-      subtotal: parseFloat(itemSubtotal.toFixed(2)),
-      discount: parseFloat(itemDiscount.toFixed(2)),
-      tax: parseFloat(itemTax.toFixed(2)),
-      total: parseFloat(itemTotal.toFixed(2)),
-      currency: business.currency,
-      currencyCode: business.currencyCode
-    };
-  });
-
-  // Calculate totals
-  const totals = calculateTransactionTotals(
-    transactionItems,
-    taxRate,
-    discountAmount,
-    loyaltyPointsRedeemed,
-    loyaltyRedemptionRate
-  );
-
-  // Validate payment amount
-  const paidAmount = parseFloat(amountPaid);
-  if (paidAmount < totals.total) {
-    throw new AppError(
-      `Insufficient payment. Total: ${totals.total}, Paid: ${paidAmount}`,
-      400
-    );
-  }
-
-  const changeGiven = parseFloat((paidAmount - totals.total).toFixed(2));
-
-  // Calculate loyalty points earned
-  const loyaltyPointsEarned = customerId
-    ? calculateLoyaltyPointsEarned(transactionItems, pointsPerDollar)
-    : 0;
-
-  // Validate customer has enough points to redeem
-  if (loyaltyPointsRedeemed > 0 && customerId) {
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-
-    if (!customer) {
-      throw new AppError('Customer not found', 404);
-    }
-
-    if (customer.loyaltyPoints < loyaltyPointsRedeemed) {
-      throw new AppError(
-        `Insufficient loyalty points. Available: ${customer.loyaltyPoints}, Requested: ${loyaltyPointsRedeemed}`,
-        400
-      );
+    const walkInResult = await handleWalkInCustomer(businessId, transactionData.customerInfo);
+    customerId = walkInResult.customerId;
+    
+    // Log walk-in conversion if customer was created/imported
+    if (walkInResult.isNew) {
+      console.log(`[TRANSACTION] Walk-in customer ${walkInResult.source === 'crm' ? 'imported' : 'created'}: ${customerId}`);
     }
   }
 
-  // Generate transaction number
-  const transactionNumber = await generateTransactionNumber(businessId);
+  // ============================================
+  // ENRICH TRANSACTION ITEMS WITH PRODUCT DATA
+  // ============================================
+  // Fetch product details for all items to get required fields
+  const enrichedItems = [];
+  if (transactionData.items && transactionData.items.length > 0) {
+    for (const item of transactionData.items) {
+      // Fetch product details
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          price: true,
+          isTaxable: true,
+        },
+      });
 
-  // Create transaction with all related data in a single database transaction
+      if (!product) {
+        throw new AppError(`Product not found: ${item.productId}`, 404);
+      }
+
+      // Calculate item-level values
+      const unitPrice = item.price || product.price;
+      const quantity = item.quantity;
+      const subtotal = item.subtotal || (unitPrice * quantity);
+      const discount = item.discount || 0;
+      
+      // Calculate tax for this item (proportional to transaction tax)
+      const itemTaxRate = transactionData.taxAmount / transactionData.subtotal;
+      const tax = product.isTaxable ? (subtotal - discount) * itemTaxRate : 0;
+      
+      // Calculate total for this item
+      const total = subtotal - discount + tax;
+
+      // Create enriched item with all required fields
+      enrichedItems.push({
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        quantity: quantity,
+        unitPrice: unitPrice,
+        subtotal: subtotal,
+        discount: discount,
+        tax: tax,
+        total: total,
+      });
+    }
+  }
+
+  // Create transaction with all items
   const transaction = await prisma.$transaction(async (tx) => {
-    // 1. Create the transaction
     const newTransaction = await tx.transaction.create({
       data: {
         businessId,
-        transactionNumber,
-        customerId: customerId || null,
+        customerId, // Uses walk-in resolved customerId
         userId,
-        shiftId: shiftId || null,
-        subtotal: totals.subtotal,
-        taxAmount: totals.taxAmount,
-        discountAmount: totals.discountAmount,
-        total: totals.total,
-        currency: business.currency,
-        currencyCode: business.currencyCode,
-        paymentMethod,
-        amountPaid: paidAmount,
-        changeGiven,
-        loyaltyPointsEarned,
-        loyaltyPointsRedeemed,
-        status: 'COMPLETED',
-        notes: notes || null,
+        transactionNumber: transactionData.transactionNumber,
+        subtotal: transactionData.subtotal,
+        taxAmount: transactionData.taxAmount,
+        discountAmount: transactionData.discountAmount || 0,
+        total: transactionData.total,
+        paymentMethod: transactionData.paymentMethod,
+        amountPaid: transactionData.amountPaid,
+        changeGiven: transactionData.changeGiven || 0,
+        loyaltyPointsEarned: transactionData.loyaltyPointsEarned || 0,
+        loyaltyPointsRedeemed: transactionData.loyaltyPointsRedeemed || 0,
+        status: transactionData.status || 'COMPLETED',
+        shiftId: transactionData.shiftId || null,
+        notes: transactionData.notes || null,
         items: {
-          create: transactionItems,
+          create: enrichedItems,
         },
       },
       include: {
-        items: true,
-        customer: true,
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            username: true,
+        items: {
+          include: {
+            product: true,
           },
         },
+        customer: true,
       },
     });
 
-    // 2. Update product stock and create stock movements
-    for (const item of transactionItems) {
-      // Update stock
-      await tx.product.update({
-        where: { id: item.productId },
-        data: {
-          stockQuantity: {
-            decrement: item.quantity,
+    // Update product stock
+    if (enrichedItems && enrichedItems.length > 0) {
+      for (const item of enrichedItems) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            stockQuantity: {
+              decrement: item.quantity,
+            },
           },
-        },
-      });
-
-      // Create stock movement
-      const product = products.find(p => p.id === item.productId);
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          movementType: 'SALE',
-          quantity: item.quantity,
-          previousStock: product.stockQuantity,
-          newStock: product.stockQuantity - item.quantity,
-          reference: transactionNumber,
-          notes: `Sale transaction`,
-        },
-      });
+        });
+      }
     }
 
-    // 3. Update customer loyalty points
-// 3. Update customer loyalty points
-    if (customerId) {
-      const netPoints = loyaltyPointsEarned - loyaltyPointsRedeemed;
-      
+    // Update customer loyalty points and stats (skip for anonymous customers)
+    if (customerId && newTransaction.customer && !newTransaction.customer.isAnonymous) {
+      const pointsEarned = transactionData.loyaltyPointsEarned || Math.floor(transactionData.total || 0);
+
       await tx.customer.update({
         where: { id: customerId },
         data: {
-          loyaltyPoints: { increment: netPoints },
-          totalSpent: { increment: totals.total },
-          visitCount: { increment: 1 },
+          loyaltyPoints: {
+            increment: pointsEarned,
+          },
+          loyaltyPointsLocal: {
+            increment: pointsEarned, // Phase 2: Local points tracking
+          },
+          totalSpent: {
+            increment: transactionData.total,
+          },
+          visitCount: {
+            increment: 1,
+          },
           lastVisit: new Date(),
         },
       });
 
-      // Create loyalty transaction for points earned - MUST BE INSIDE if(customerId)
-      if (loyaltyPointsEarned > 0) {
-        await tx.loyaltyTransaction.create({
-          data: {
-            businessId,
-            customerId,
-            type: 'EARNED',
-            points: loyaltyPointsEarned,
-            transactionId: newTransaction.id,
-            description: `Points earned from transaction ${transactionNumber}`,
-          },
-        });
-      }
+      // Create loyalty transaction record
+      await tx.loyaltyTransaction.create({
+        data: {
+          businessId,
+          customerId,
+          transactionId: newTransaction.id,
+          points: pointsEarned,
+          type: 'EARNED',
+          description: `Points earned from transaction ${newTransaction.transactionNumber}`,
+        },
+      });
+    }
 
-      // Create loyalty transaction for points redeemed - MUST BE INSIDE if(customerId)
-      if (loyaltyPointsRedeemed > 0) {
-        await tx.loyaltyTransaction.create({
-          data: {
-            businessId,
-            customerId,
-            type: 'REDEEMED',
-            points: -loyaltyPointsRedeemed,
-            transactionId: newTransaction.id,
-            description: `Points redeemed in transaction ${transactionNumber}`,
-          },
-        });
-      }
-    } // <-- Make sure this closing brace is AFTER all loyalty transactions
-
-    // 4. Create audit log
+    // Create audit log
     await tx.auditLog.create({
       data: {
         userId,
         action: 'CREATE',
         entityType: 'Transaction',
         entityId: newTransaction.id,
-        changes: JSON.stringify({
-          transactionNumber,
-          total: totals.total,
-          itemCount: transactionItems.length,
-        }),
+        changes: JSON.stringify(newTransaction),
       },
     });
 
     return newTransaction;
   });
+
+  // ============================================
+  // 🔗 INTEGRATION: Phase 2D - Add to sync queue
+  // ============================================
+  try {
+    // Only sync if customer is not anonymous and realtime sync is enabled
+    if (transaction.customer && !transaction.customer.isAnonymous) {
+      if (process.env.ENABLE_REALTIME_SYNC === 'true') {
+        // FIXED: Use object parameter instead of positional arguments
+        await syncQueueService.addToQueue({
+          businessId: transaction.businessId,
+          entityType: 'transaction',
+          entityId: transaction.id,
+          operation: 'CREATE',
+          priority: 'HIGH',
+          payload: null,
+        });
+        console.log(`[SYNC] Transaction ${transaction.transactionNumber} added to sync queue`);
+      }
+    } else {
+      console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, skipping sync`);
+    }
+  } catch (error) {
+    // Log error but don't fail the transaction
+    console.error(`[SYNC ERROR] Failed to add transaction to sync queue:`, error.message);
+  }
 
   return transaction;
 };
@@ -373,24 +218,21 @@ export const getAllTransactions = async (businessId, filters = {}) => {
   const {
     page = 1,
     limit = 20,
-    status,
-    customerId,
-    userId,
     startDate,
     endDate,
-    minAmount,
-    maxAmount,
+    customerId,
+    status,
     paymentMethod,
     sortBy = 'createdAt',
     sortOrder = 'desc',
+    includeAnonymous = true, // Phase 2B: Option to include/exclude anonymous
   } = filters;
 
   const skip = (page - 1) * limit;
-  const where = {businessId};
+  const where = { businessId };
 
-  if (status) where.status = status;
   if (customerId) where.customerId = customerId;
-  if (userId) where.userId = userId;
+  if (status) where.status = status;
   if (paymentMethod) where.paymentMethod = paymentMethod;
 
   if (startDate || endDate) {
@@ -399,10 +241,11 @@ export const getAllTransactions = async (businessId, filters = {}) => {
     if (endDate) where.createdAt.lte = new Date(endDate);
   }
 
-  if (minAmount || maxAmount) {
-    where.total = {};
-    if (minAmount) where.total.gte = parseFloat(minAmount);
-    if (maxAmount) where.total.lte = parseFloat(maxAmount);
+  // Filter out anonymous transactions if requested
+  if (!includeAnonymous) {
+    where.customer = {
+      isAnonymous: false,
+    };
   }
 
   const [transactions, total] = await Promise.all([
@@ -419,24 +262,18 @@ export const getAllTransactions = async (businessId, filters = {}) => {
             lastName: true,
             email: true,
             phone: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            username: true,
+            isAnonymous: true,
           },
         },
         items: {
-          select: {
-            id: true,
-            productName: true,
-            sku: true,
-            quantity: true,
-            unitPrice: true,
-            total: true,
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+              },
+            },
           },
         },
       },
@@ -454,220 +291,130 @@ export const getAllTransactions = async (businessId, filters = {}) => {
 };
 
 /**
- * Get single transaction by ID
+ * Get transaction by ID
  */
-export const getTransactionById = async (id, businessId) => {
-  const transaction = await prisma.transaction.findUnique({
-    where: { id,
-      businessId
-     },
-    include: {
-      customer: true,
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          username: true,
-        },
-      },
-      items: true,
-      shift: true,
-    },
-  });
-
-  if (!transaction) {
-    throw new AppError('Transaction not found', 404);
-  }
-
-  return transaction;
-};
-
-/**
- * Get transaction by transaction number
- */
-export const getTransactionByNumber = async (transactionNumber, businessId) => {
-  const transaction = await prisma.transaction.findUnique({
-    where: { transactionNumber,
-      businessId
-     },
-    include: {
-      customer: true,
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          username: true,
-        },
-      },
-      items: true,
-    },
-  });
-
-  if (!transaction) {
-    throw new AppError('Transaction not found', 404);
-  }
-
-  return transaction;
-};
-
-/**
- * Void a transaction
- */
-export const voidTransaction = async (id, reason, userId, businessId) => {
+export const getTransactionById = async (businessId, id) => {
   const transaction = await prisma.transaction.findFirst({
     where: { 
       id,
       businessId
     },
-    include: { items: true },
+    include: {
+      customer: true,
+      items: {
+        include: {
+          product: true,
+        },
+      },
+      shift: {
+        select: {
+          id: true,
+          shiftNumber: true,
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!transaction) {
     throw new AppError('Transaction not found', 404);
   }
 
-  if (transaction.status === 'VOID') {
-    throw new AppError('Transaction is already voided', 400);
-  }
-
-  if (transaction.status === 'REFUNDED') {
-    throw new AppError('Cannot void a refunded transaction', 400);
-  }
-
-  // Void transaction and restore stock in a single database transaction
-  const voidedTransaction = await prisma.$transaction(async (tx) => {
-    // 1. Update transaction status
-    const updated = await tx.transaction.update({
-      where: { id },
-      data: {
-        status: 'VOID',
-        voidReason: reason,
-      },
-      include: {
-        items: true,
-        customer: true,
-      },
-    });
-
-    // 2. Restore stock for each item
-    for (const item of transaction.items) {
-      const product = await tx.product.findUnique({
-        where: { id: item.productId },
-      });
-
-      await tx.product.update({
-        where: { id: item.productId },
-        data: {
-          stockQuantity: { increment: item.quantity },
-        },
-      });
-
-      // Create stock movement
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          movementType: 'RETURN',
-          quantity: item.quantity,
-          previousStock: product.stockQuantity,
-          newStock: product.stockQuantity + item.quantity,
-          reference: transaction.transactionNumber,
-          notes: `Void transaction: ${reason}`,
-        },
-      });
-    }
-
-    // 3. Reverse loyalty points
-    if (transaction.customerId) {
-      const netPoints = transaction.loyaltyPointsRedeemed - transaction.loyaltyPointsEarned;
-      
-      await tx.customer.update({
-        where: { id: transaction.customerId },
-        data: {
-          loyaltyPoints: { increment: netPoints },
-          totalSpent: { decrement: transaction.total },
-          visitCount: { decrement: 1 },
-        },
-      });
-
-      // Create loyalty adjustment
-      if (netPoints !== 0) {
-        await tx.loyaltyTransaction.create({
-          data: {
-             businessId,
-             customerId: transaction.customerId,
-            type: 'ADJUSTED',
-            points: netPoints,
-            transactionId: transaction.id,
-            description: `Void transaction ${transaction.transactionNumber}: ${reason}`,
-          },
-        });
-      }
-    }
-
-    // 4. Create audit log
-    await tx.auditLog.create({
-      data: {
-        userId,
-        action: 'VOID_TRANSACTION',
-        entityType: 'Transaction',
-        entityId: id,
-        changes: JSON.stringify({ reason, transactionNumber: transaction.transactionNumber }),
-      },
-    });
-
-    return updated;
-  });
-
-  return voidedTransaction;
+  return transaction;
 };
 
 /**
- * Get sales summary
+ * Update transaction status
  */
-export const getSalesSummary = async (businessId, startDate, endDate) => {
-  const where = {
+export const updateTransactionStatus = async (businessId, id, status, userId) => {
+  const transaction = await prisma.transaction.findFirst({
+    where: { 
+      id,
+      businessId
+    },
+  });
+
+  if (!transaction) {
+    throw new AppError('Transaction not found', 404);
+  }
+
+  const updatedTransaction = await prisma.transaction.update({
+    where: { id },
+    data: { status },
+  });
+
+  // Create audit log
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action: 'UPDATE',
+      entityType: 'Transaction',
+      entityId: id,
+      changes: JSON.stringify({
+        before: { status: transaction.status },
+        after: { status },
+      }),
+    },
+  });
+
+  return updatedTransaction;
+};
+
+/**
+ * Get transaction analytics
+ */
+export const getTransactionAnalytics = async (businessId, filters = {}) => {
+  const { startDate, endDate, includeAnonymous = true } = filters;
+  
+  const where = { 
     businessId,
-    status: 'COMPLETED',
-    createdAt: {},
+    status: 'COMPLETED'
   };
 
-  if (startDate) where.createdAt.gte = new Date(startDate);
-  if (endDate) where.createdAt.lte = new Date(endDate);
+  if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) where.createdAt.gte = new Date(startDate);
+    if (endDate) where.createdAt.lte = new Date(endDate);
+  }
 
-  const [transactions, summary] = await Promise.all([
-    prisma.transaction.findMany({ where }),
+  // Filter out anonymous transactions if requested
+  if (!includeAnonymous) {
+    where.customer = {
+      isAnonymous: false,
+    };
+  }
+
+  const [totalRevenue, transactionCount, averageTransaction, anonymousCount] = await Promise.all([
     prisma.transaction.aggregate({
       where,
-      _sum: {
-        total: true,
-        subtotal: true,
-        taxAmount: true,
-        discountAmount: true,
+      _sum: { total: true },
+    }),
+    prisma.transaction.count({ where }),
+    prisma.transaction.aggregate({
+      where,
+      _avg: { total: true },
+    }),
+    // Phase 2B: Count anonymous transactions
+    prisma.transaction.count({
+      where: {
+        ...where,
+        customer: {
+          isAnonymous: true,
+        },
       },
-      _count: true,
     }),
   ]);
 
-  // Calculate payment method breakdown
-  const paymentBreakdown = {};
-  transactions.forEach(txn => {
-    if (!paymentBreakdown[txn.paymentMethod]) {
-      paymentBreakdown[txn.paymentMethod] = { count: 0, total: 0 };
-    }
-    paymentBreakdown[txn.paymentMethod].count += 1;
-    paymentBreakdown[txn.paymentMethod].total += parseFloat(txn.total);
-  });
-
   return {
-    totalSales: summary._sum.total || 0,
-    totalTransactions: summary._count,
-    averageTransaction: summary._count > 0 
-      ? (summary._sum.total / summary._count).toFixed(2) 
-      : 0,
-    totalTax: summary._sum.taxAmount || 0,
-    totalDiscounts: summary._sum.discountAmount || 0,
-    paymentBreakdown,
+    totalRevenue: totalRevenue._sum.total || 0,
+    transactionCount,
+    averageTransaction: averageTransaction._avg.total || 0,
+    anonymousTransactionCount: anonymousCount,
+    registeredTransactionCount: transactionCount - anonymousCount,
   };
 };

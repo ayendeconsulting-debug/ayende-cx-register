@@ -13,6 +13,15 @@ import shiftRoutes from './routes/shiftRoutes.js';
 import stockAdjustmentRoutes from './routes/stockAdjustmentRoutes.js';
 import registrationRoutes from './routes/registration.routes.js';
 import invitationRoutes from './routes/invitation.routes.js';
+// ============================================
+// 🔗 INTEGRATION: Import integration routes
+// ============================================
+import integrationRoutes from './routes/integration.routes.js';
+// ============================================
+// 🔗 PHASE 2C: Import webhook routes
+// ============================================
+import customerSyncRoutes from './routes/integration/customerSync.js';
+import * as syncJob from './cron/syncJob.js';
 
 
 // Load environment variables
@@ -61,6 +70,15 @@ app.use('/api/v1/stock-adjustments', stockAdjustmentRoutes);
 app.use('/api/v1/registration', registrationRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
 
+// ============================================
+// 🔗 INTEGRATION: Register integration routes
+// ============================================
+app.use('/api/v1/integration', integrationRoutes);
+// ============================================
+// 🔗 PHASE 2C: Register webhook routes
+// ============================================
+app.use('/api/integration', customerSyncRoutes);
+
 // 404 handler
 app.use(notFound);
 
@@ -72,15 +90,32 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`
-    ╔═══════════════════════════════════════════╗
+    ╔═══════════════════════════════════════╗
     ║   Ayende-CX Payment Register System       ║
     ║   Backend Server Running                  ║
-    ╠═══════════════════════════════════════════╣
+    ╠═══════════════════════════════════════╣
     ║   Environment: ${process.env.NODE_ENV?.padEnd(24) || 'development'.padEnd(24)}║
     ║   Port: ${String(PORT).padEnd(32)}║
     ║   API: /api/${API_VERSION.padEnd(30)}║
-    ╚═══════════════════════════════════════════╝
+    ║   🔗 Integration: ENABLED                 ║
+    ║   🔗 Webhooks: ENABLED (Phase 2C)         ║
+    ║   🔗 Sync Job: ENABLED (Phase 2D)         ║
+    ╚═══════════════════════════════════════╝
   `);
+  
+  // ============================================
+  // PHASE 2D: Initialize sync cron job
+  // ============================================
+  if (process.env.ENABLE_REALTIME_SYNC === 'true') {
+    try {
+      syncJob.initializeSyncJob();
+      console.log('  ✓ Sync job initialized successfully\n');
+    } catch (error) {
+      console.error('  ✗ Failed to initialize sync job:', error.message);
+    }
+  } else {
+    console.log('  ⚠ Sync job disabled (ENABLE_REALTIME_SYNC=false)\n');
+  }
 });
 
 // Handle unhandled promise rejections

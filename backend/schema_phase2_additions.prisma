@@ -1,0 +1,164 @@
+// Prisma Schema - Phase 2 Updates
+// Add these enums and model updates to your existing schema.prisma
+
+// ============================================
+// NEW ENUMS
+// ============================================
+
+enum CustomerSource {
+  CRM
+  POS
+  ANONYMOUS
+}
+
+enum CustomerSyncState {
+  SYNCED
+  PENDING
+  CONFLICT
+  FAILED
+}
+
+enum SyncPriority {
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  RETRY
+}
+
+// ============================================
+// UPDATED CUSTOMER MODEL
+// ============================================
+
+model Customer {
+  id               String            @id @default(cuid())
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  dateOfBirth      DateTime?
+  loyaltyPoints    Int               @default(0)
+  totalSpent       Decimal           @db.Decimal(10, 2) @default(0.00)
+  visitCount       Int               @default(0)
+  lastVisit        DateTime?
+  memberSince      DateTime          @default(now())
+  loyaltyTier      LoyaltyTier       @default(BRONZE)
+  address          String?
+  city             String?
+  postalCode       String?
+  country          String?
+  marketingOptIn   Boolean           @default(false)
+  isActive         Boolean           @default(true)
+  
+  // Integration fields (existing)
+  externalId           String?          @unique
+  lastSyncedAt         DateTime?
+  syncStatus           SyncStatus       @default(ACTIVE)
+  
+  // NEW: Phase 2 sync fields
+  customerSource       CustomerSource   @default(POS)
+  syncState            CustomerSyncState @default(PENDING)
+  lastRefreshedAt      DateTime?
+  syncRetryCount       Int              @default(0)
+  syncError            String?
+  needsEnrichment      Boolean          @default(false)
+  isAnonymous          Boolean          @default(false)
+  
+  // NEW: Dual loyalty calculation
+  loyaltyPointsLocal   Int              @default(0)
+  loyaltyPointsCRM     Int?
+  loyaltyLastSyncedAt  DateTime?
+  
+  // Relations
+  businessId       String
+  business         Business          @relation(fields: [businessId], references: [id])
+  transactions     Transaction[]
+  reconciliations  LoyaltyReconciliation[]
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  
+  @@index([externalId])
+  @@index([isAnonymous])
+  @@index([syncState])
+  @@index([customerSource])
+  @@index([phone])
+}
+
+// ============================================
+// NEW: SYNC QUEUE MODEL
+// ============================================
+
+model SyncQueue {
+  id              String          @id @default(cuid())
+  entityType      EntityType
+  entityId        String
+  operation       SyncOperation
+  priority        SyncPriority    @default(NORMAL)
+  payload         Json
+  status          QueueStatus     @default(PENDING)
+  retryCount      Int             @default(0)
+  maxRetries      Int             @default(3)
+  lastError       String?
+  scheduledFor    DateTime        @default(now())
+  processedAt     DateTime?
+  
+  businessId      String
+  business        Business        @relation(fields: [businessId], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([status, priority, scheduledFor])
+  @@index([entityType, entityId])
+  @@index([businessId])
+}
+
+// ============================================
+// NEW: LOYALTY RECONCILIATION MODEL
+// ============================================
+
+model LoyaltyReconciliation {
+  id          String    @id @default(cuid())
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id])
+  
+  posPoints   Int
+  crmPoints   Int
+  difference  Int
+  
+  status      String    @default("PENDING") // PENDING, RESOLVED, IGNORED
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  resolution  String?   // CRM_WINS, POS_WINS, MANUAL_ADJUSTMENT
+  notes       String?
+  
+  detectedAt  DateTime  @default(now())
+  
+  @@index([status])
+  @@index([customerId])
+  @@index([detectedAt])
+}
+
+// ============================================
+// UPDATE BUSINESS MODEL (add new relations)
+// ============================================
+
+// Add these to your existing Business model:
+model Business {
+  // ... existing fields ...
+  
+  // NEW: Phase 2 relations
+  syncQueues              SyncQueue[]
+  loyaltyReconciliations  LoyaltyReconciliation[]
+  
+  // ... rest of existing relations and fields ...
+}
