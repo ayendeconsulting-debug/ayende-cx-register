@@ -7,6 +7,7 @@
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { syncCustomerToCRM, fetchCustomerFromCRM } from './crmIntegrationService.js';
+import * as syncQueueService from './syncQueueService.js';
 
 /**
  * Create customer with CRM duplicate check
@@ -77,19 +78,14 @@ export const createCustomer = async (businessId, customerData) => {
       },
     });
 
-    // Queue for CRM sync
-    await prisma.syncQueue.create({
-      data: {
-        businessId,
-        entityType: 'customer',
-        entityId: customer.id,
-        operation: 'CREATE',
-        priority: 'NORMAL',
-        status: 'PENDING',
-        payload: {
-          customerId: customer.id,
-        },
-      },
+    // Queue for CRM sync using syncQueueService
+    await syncQueueService.addToQueue({
+      businessId,
+      entityType: 'customer',
+      entityId: customer.id,
+      operation: 'CREATE',
+      priority: 'HIGH',
+      payload: null,
     });
 
     console.log(`[CUSTOMER] Customer created: ${customer.id}`);
@@ -276,7 +272,7 @@ export const updateCustomer = async (businessId, id, updateData) => {
       entityType: 'customer',
       entityId: id,
       operation: 'UPDATE',
-      priority: 'NORMAL',
+      priority: 'NORMAL', // UPDATE operations can remain NORMAL priority
       status: 'PENDING',
       payload: {
         customerId: id,
@@ -325,7 +321,7 @@ export const deleteCustomer = async (businessId, id) => {
       entityType: 'customer',
       entityId: id,
       operation: 'DELETE',
-      priority: 'NORMAL',
+      priority: 'NORMAL', // DELETE operations can remain NORMAL priority
       status: 'PENDING',
       payload: {
         customerId: id,

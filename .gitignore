@@ -10,6 +10,9 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.staging
+*.env
 
 # Build outputs
 dist/
@@ -38,7 +41,17 @@ coverage/
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+prisma/migrations/.migration_lock
 
 # Temporary files
 tmp/
 temp/
+
+# Railway
+.railway/
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+

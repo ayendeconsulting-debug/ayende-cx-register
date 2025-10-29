@@ -88,13 +88,9 @@ export const createTransaction = async (businessId, transactionData, userId) => 
   const transaction = await prisma.$transaction(async (tx) => {
     const newTransaction = await tx.transaction.create({
       data: {
-        business: {
-          connect: { id: businessId }
-        },
-        customer: {
-          connect: { id: customerId }
-        },
-        ...(userId && { user: { connect: { id: userId } } }),
+        businessId,
+        customerId, // Uses walk-in resolved customerId
+        userId,
         transactionNumber: transactionData.transactionNumber,
         subtotal: transactionData.subtotal,
         taxAmount: transactionData.taxAmount,
@@ -106,7 +102,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
         loyaltyPointsEarned: transactionData.loyaltyPointsEarned || 0,
         loyaltyPointsRedeemed: transactionData.loyaltyPointsRedeemed || 0,
         status: transactionData.status || 'COMPLETED',
-        ...(transactionData.shiftId && { shift: { connect: { id: transactionData.shiftId } } }),
+        shiftId: transactionData.shiftId || null,
         notes: transactionData.notes || null,
         items: {
           create: enrichedItems,
@@ -191,11 +187,9 @@ export const createTransaction = async (businessId, transactionData, userId) => 
   // ============================================
   try {
     // Only sync if customer is not anonymous and realtime sync is enabled
-    const customer = await prisma.customer.findUnique({ where: { id: transaction.customerId }, select: { isAnonymous: true } });
-    
-    // Only sync if customer exists, is not anonymous, and realtime sync is enabled
-    if (customer && !customer.isAnonymous && process.env.ENABLE_REALTIME_SYNC === 'true') {
-      // Add transaction to sync queue
+    if (transaction.customer && !transaction.customer.isAnonymous) {
+      if (process.env.ENABLE_REALTIME_SYNC === 'true') {
+        // FIXED: Use object parameter instead of positional arguments
         await syncQueueService.addToQueue({
           businessId: transaction.businessId,
           entityType: 'transaction',
@@ -205,7 +199,8 @@ export const createTransaction = async (businessId, transactionData, userId) => 
           payload: null,
         });
         console.log(`[SYNC] Transaction ${transaction.transactionNumber} added to sync queue`);
-    } else if (customer && customer.isAnonymous) {
+      }
+    } else {
       console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, skipping sync`);
     }
   } catch (error) {

@@ -88,13 +88,9 @@ export const createTransaction = async (businessId, transactionData, userId) => 
   const transaction = await prisma.$transaction(async (tx) => {
     const newTransaction = await tx.transaction.create({
       data: {
-        business: {
-          connect: { id: businessId }
-        },
-        customer: {
-          connect: { id: customerId }
-        },
-        ...(userId && { user: { connect: { id: userId } } }),
+        businessId,
+        customerId, // Uses walk-in resolved customerId
+        userId,
         transactionNumber: transactionData.transactionNumber,
         subtotal: transactionData.subtotal,
         taxAmount: transactionData.taxAmount,
@@ -106,7 +102,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
         loyaltyPointsEarned: transactionData.loyaltyPointsEarned || 0,
         loyaltyPointsRedeemed: transactionData.loyaltyPointsRedeemed || 0,
         status: transactionData.status || 'COMPLETED',
-        ...(transactionData.shiftId && { shift: { connect: { id: transactionData.shiftId } } }),
+        shiftId: transactionData.shiftId || null,
         notes: transactionData.notes || null,
         items: {
           create: enrichedItems,

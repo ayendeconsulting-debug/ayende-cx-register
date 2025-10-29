@@ -70,7 +70,7 @@ model Business {
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   lastSyncedAt           DateTime?               @db.Timestamp(6)
-  syncStatus             SyncStatus?             @default(ACTIVE)
+  syncStatus             SyncStatus?             @default(PENDING)
   categories             Category[]
   customers              Customer[]
   loyaltyReconciliations LoyaltyReconciliation[]
@@ -87,6 +87,7 @@ model Business {
 
   @@index([businessName])
   @@index([externalTenantId])
+
 }
 
 model Customer {
@@ -114,7 +115,7 @@ model Customer {
   businessId          String
   externalId          String?
   lastSyncedAt        DateTime?
-  syncStatus          SyncStatus?             @default(ACTIVE)
+  syncStatus          SyncStatus?             @default(PENDING)
   customerSource      CustomerSource?         @default(POS)
   syncState           CustomerSyncState?      @default(PENDING)
   lastRefreshedAt     DateTime?               @db.Timestamp(6)
@@ -140,6 +141,7 @@ model Customer {
   @@index([isAnonymous])
   @@index([syncState])
   @@index([customerSource])
+
 }
 
 model Category {
@@ -281,6 +283,43 @@ model LoyaltyTransaction {
   @@index([customerId])
   @@index([businessId])
   @@index([createdAt])
+}
+
+// Add this model to your schema.prisma file
+
+model LoyaltyReconciliation {
+  id                  String   @id @default(uuid())
+  businessId          String
+  customerId          String
+  
+  // Reconciliation Details
+  detectedAt          DateTime @default(now())
+  posPoints           Int
+  crmPoints           Int
+  discrepancy         Int
+  
+  // Resolution - Using String instead of enum
+  action              String?
+  status              String   @default("PENDING")
+  resolvedBy          String?
+  resolvedAt          DateTime?
+  
+  // Audit Trail
+  notes               String?
+  errorMessage        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Relationships
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer            Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@index([businessId])
+  @@index([customerId])
+  @@index([detectedAt])
+  @@index([status])
+  @@map("LoyaltyReconciliation")
+  
 }
 
 model Shift {
@@ -452,7 +491,7 @@ model SystemMapping {
   crmId        String
   businessId   String
   lastSyncedAt DateTime          @default(now()) @db.Timestamp(6)
-  syncStatus   SyncStatus        @default(ACTIVE)
+  syncStatus   SyncStatus        @default(PENDING)
   metadata     Json?
   createdAt    DateTime          @default(now()) @db.Timestamp(6)
   updatedAt    DateTime          @default(now()) @updatedAt @db.Timestamp(6)
@@ -485,27 +524,6 @@ model sync_logs {
   @@index([status])
   @@index([createdAt])
   @@index([entityType, entityId])
-}
-
-model LoyaltyReconciliation {
-  id         String    @id @default(dbgenerated("(gen_random_uuid())::text"))
-  customerId String
-  businessId String
-  posPoints  Int
-  crmPoints  Int
-  difference Int
-  status     String?   @default("PENDING")
-  resolvedBy String?
-  resolvedAt DateTime? @db.Timestamp(6)
-  resolution String?
-  notes      String?
-  detectedAt DateTime? @default(now()) @db.Timestamp(6)
-  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([status])
-  @@index([customerId])
-  @@index([detectedAt])
 }
 
 model SyncQueue {
@@ -593,8 +611,7 @@ enum SyncStatus {
   SUCCESS
   FAILED
   RETRY_SCHEDULED
-  ACTIVE
-  ARCHIVED
+
 }
 
 enum AdjustmentMovementType {

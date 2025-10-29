@@ -4,6 +4,12 @@
  * 
  * This service sends data from POS (source of truth for transactions)
  * to CRM (source of truth for customer profiles)
+ * 
+ * OPTIMIZATIONS:
+ * - Added business.externalTenantId for correct tenant resolution
+ * - Enhanced error logging with context
+ * - Added performance metrics tracking
+ * - Improved validation and error messages
  */
 
 import axios from 'axios';
@@ -16,6 +22,14 @@ const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET;
 const SYNC_TIMEOUT = parseInt(process.env.CRM_API_TIMEOUT || '30000');
 const ENABLE_SYNC = process.env.ENABLE_REALTIME_SYNC === 'true';
 const MAX_RETRY_ATTEMPTS = parseInt(process.env.SYNC_RETRY_ATTEMPTS || '3');
+
+// Performance tracking
+const syncMetrics = {
+  transactionsSynced: 0,
+  customersSynced: 0,
+  failedSyncs: 0,
+  totalSyncTime: 0,
+};
 
 /**
  * Generate JWT token for system-to-system authentication
@@ -46,6 +60,8 @@ const crmApiRequest = async (endpoint, method, data, tenantId) => {
     return null;
   }
 
+  const startTime = Date.now();
+
   try {
     const token = generateIntegrationToken(tenantId);
     const url = `${CRM_API_URL}${endpoint}`;
@@ -62,10 +78,19 @@ const crmApiRequest = async (endpoint, method, data, tenantId) => {
       timeout: SYNC_TIMEOUT,
     });
 
+    const duration = Date.now() - startTime;
+    console.log(`[CRM SYNC] ${method} ${endpoint} - ${response.status} (${duration}ms)`);
+
     return response.data;
   } catch (error) {
+    const duration = Date.now() - startTime;
+    
     console.error('[CRM SYNC ERROR]', {
       endpoint,
+      method,
+      tenantId,
+      duration: `${duration}ms`,
+      status: error.response?.status,
       error: error.message,
       response: error.response?.data,
     });
@@ -93,7 +118,7 @@ const logSyncOperation = async (operation, entityType, entityId, businessId, sta
       },
     });
   } catch (logError) {
-    console.error('[SYNC LOG ERROR]', logError);
+    console.error('[SYNC LOG ERROR]', logError.message);
   }
 };
 
@@ -111,10 +136,25 @@ const retryOperation = async (operation, maxRetries = MAX_RETRY_ATTEMPTS) => {
 
       // Exponential backoff: 2^attempt seconds
       const delay = Math.pow(2, attempt) * 1000;
-      console.log(`[CRM SYNC] Retry attempt ${attempt} in ${delay}ms`);
+      console.log(`[CRM SYNC] Retry attempt ${attempt}/${maxRetries} in ${delay}ms`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
+};
+
+/**
+ * Validate entity has required business relation
+ */
+const validateBusinessRelation = (entity, entityType) => {
+  if (!entity.business) {
+    throw new Error(`${entityType} missing business relation - cannot access externalTenantId`);
+  }
+  
+  if (!entity.business.externalTenantId) {
+    throw new Error(`Business externalTenantId not configured for ${entityType} - cannot sync to CRM`);
+  }
+  
+  return entity.business.externalTenantId;
 };
 
 /**
@@ -127,14 +167,20 @@ export const syncTransactionToCRM = async (transaction) => {
     return;
   }
 
+  const syncStartTime = Date.now();
   console.log(`[CRM SYNC] Syncing transaction ${transaction.transactionNumber} to CRM`);
 
   try {
+    // Validate and extract CRM tenant ID
+    const tenantId = validateBusinessRelation(transaction, 'Transaction');
+    
+    console.log(`[CRM SYNC] Using tenant ID: ${tenantId} (from business.externalTenantId)`);
+    
     // Prepare payload
     const payload = {
       transactionId: transaction.id,
       transactionNumber: transaction.transactionNumber,
-      tenantId: transaction.business.externalTenantId,  // ✅ Correct - sends CRM tenant UUID
+      tenantId: tenantId,
       customerId: transaction.customerId,
       customerEmail: transaction.customer?.email,
       
@@ -143,8 +189,8 @@ export const syncTransactionToCRM = async (transaction) => {
       tax: parseFloat(transaction.taxAmount),
       discount: parseFloat(transaction.discountAmount),
       total: parseFloat(transaction.total),
-      currency: transaction.currency,
-      currencyCode: transaction.currencyCode,
+      currency: transaction.currency || 'USD',
+      currencyCode: transaction.currencyCode || 'USD',
       
       // Payment details
       paymentMethod: transaction.paymentMethod,
@@ -152,21 +198,21 @@ export const syncTransactionToCRM = async (transaction) => {
       changeGiven: parseFloat(transaction.changeGiven),
       
       // Loyalty
-      pointsEarned: transaction.loyaltyPointsEarned,
-      pointsRedeemed: transaction.loyaltyPointsRedeemed,
+      pointsEarned: transaction.loyaltyPointsEarned || 0,
+      pointsRedeemed: transaction.loyaltyPointsRedeemed || 0,
       
       // Items
-      items: transaction.items.map(item => ({
+      items: transaction.items?.map(item => ({
         productId: item.productId,
         productName: item.productName,
         sku: item.sku,
         quantity: item.quantity,
         unitPrice: parseFloat(item.unitPrice),
         subtotal: parseFloat(item.subtotal),
-        discount: parseFloat(item.discount),
-        tax: parseFloat(item.tax),
+        discount: parseFloat(item.discount || 0),
+        tax: parseFloat(item.tax || 0),
         total: parseFloat(item.total),
-      })),
+      })) || [],
       
       // Metadata
       status: transaction.status,
@@ -181,7 +227,7 @@ export const syncTransactionToCRM = async (transaction) => {
         '/api/v1/sync/transaction',
         'POST',
         payload,
-        transaction.businessId
+        tenantId
       );
     });
 
@@ -204,9 +250,21 @@ export const syncTransactionToCRM = async (transaction) => {
       payload
     );
 
-    console.log(`[CRM SYNC] Transaction ${transaction.transactionNumber} synced successfully`);
+    // Update metrics
+    syncMetrics.transactionsSynced++;
+    const syncDuration = Date.now() - syncStartTime;
+    syncMetrics.totalSyncTime += syncDuration;
+
+    console.log(`[CRM SYNC] Transaction ${transaction.transactionNumber} synced successfully (${syncDuration}ms)`);
   } catch (error) {
-    console.error(`[CRM SYNC] Failed to sync transaction ${transaction.transactionNumber}`, error);
+    const syncDuration = Date.now() - syncStartTime;
+    syncMetrics.failedSyncs++;
+    
+    console.error(`[CRM SYNC] Failed to sync transaction ${transaction.transactionNumber} (${syncDuration}ms)`, {
+      error: error.message,
+      transactionId: transaction.id,
+      tenantId: transaction.business?.externalTenantId || 'missing',
+    });
 
     // Log failure
     await logSyncOperation(
@@ -234,13 +292,19 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
     return;
   }
 
+  const syncStartTime = Date.now();
   console.log(`[CRM SYNC] Syncing customer ${customer.email} to CRM (${operation})`);
 
   try {
+    // Validate and extract CRM tenant ID
+    const tenantId = validateBusinessRelation(customer, 'Customer');
+    
+    console.log(`[CRM SYNC] Using tenant ID: ${tenantId} (from business.externalTenantId)`);
+    
     // Prepare payload
     const payload = {
       customerId: customer.id,
-      tenantId: customer.businessId,
+      tenantId: tenantId,
       email: customer.email,
       firstName: customer.firstName,
       lastName: customer.lastName,
@@ -252,14 +316,14 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
       dateOfBirth: customer.dateOfBirth?.toISOString() || null,
       
       // Loyalty data (POS is source of truth)
-      loyaltyPoints: customer.loyaltyPoints,
-      loyaltyTier: customer.loyaltyTier,
-      totalSpent: parseFloat(customer.totalSpent),
-      visitCount: customer.visitCount,
+      loyaltyPoints: customer.loyaltyPoints || 0,
+      loyaltyTier: customer.loyaltyTier || 'BRONZE',
+      totalSpent: parseFloat(customer.totalSpent || 0),
+      visitCount: customer.visitCount || 0,
       lastVisit: customer.lastVisit?.toISOString() || null,
       
       // Preferences
-      marketingOptIn: customer.marketingOptIn,
+      marketingOptIn: customer.marketingOptIn || false,
       
       // Metadata
       memberSince: customer.memberSince.toISOString(),
@@ -267,21 +331,27 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
     };
 
     // Send to CRM with retry
-    await retryOperation(async () => {
-      return await crmApiRequest(
-        '/api/v1/sync/customer',
-        'POST',
-        payload,
-        customer.businessId
-      );
-    });
+const response = await retryOperation(async () => {
+  return await crmApiRequest(
+    '/api/v1/sync/customer',
+    'POST',
+    payload,
+    tenantId
+  );
+});
 
-    // Update customer to mark as synced
+    // Update customer to mark as synced AND save CRM customer ID
+const updateData = { lastSyncedAt: new Date() };
+
+    // Save the CRM customer ID if returned
+    if (response?.customer?.id) {
+      updateData.externalId = response.customer.id.toString();
+      console.log(`[CRM SYNC] Saved CRM customer ID: ${updateData.externalId}`);
+    }
+
     await prisma.customer.update({
       where: { id: customer.id },
-      data: {
-        lastSyncedAt: new Date(),
-      },
+      data: updateData,
     });
 
     // Log success
@@ -294,9 +364,21 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
       payload
     );
 
-    console.log(`[CRM SYNC] Customer ${customer.email} synced successfully`);
+    // Update metrics
+    syncMetrics.customersSynced++;
+    const syncDuration = Date.now() - syncStartTime;
+    syncMetrics.totalSyncTime += syncDuration;
+
+    console.log(`[CRM SYNC] Customer ${customer.email} synced successfully (${syncDuration}ms)`);
   } catch (error) {
-    console.error(`[CRM SYNC] Failed to sync customer ${customer.email}`, error);
+    const syncDuration = Date.now() - syncStartTime;
+    syncMetrics.failedSyncs++;
+    
+    console.error(`[CRM SYNC] Failed to sync customer ${customer.email} (${syncDuration}ms)`, {
+      error: error.message,
+      customerId: customer.id,
+      tenantId: customer.business?.externalTenantId || 'missing',
+    });
 
     // Log failure
     await logSyncOperation(
@@ -345,7 +427,7 @@ export const fetchCustomerFromCRM = async (identifier, businessId, lookupType = 
 
     return response;
   } catch (error) {
-    console.error(`[CRM SYNC] Failed to fetch customer ${identifier}:`, error);
+    console.error(`[CRM SYNC] Failed to fetch customer ${identifier}:`, error.message);
     return null;
   }
 };
@@ -358,13 +440,16 @@ export const updateCustomerFromCRM = async (crmCustomerData) => {
   try {
     const { customerId, tenantId, ...customerData } = crmCustomerData;
 
-    // Find customer by email or external ID
+    // Find customer by email or external ID - include business relation
     const customer = await prisma.customer.findFirst({
       where: {
         OR: [
           { id: customerId },
           { email: customerData.email, businessId: tenantId },
         ],
+      },
+      include: {
+        business: true,
       },
     });
 
@@ -395,7 +480,7 @@ export const updateCustomerFromCRM = async (crmCustomerData) => {
     console.log(`[CRM SYNC] Customer ${customerData.email} updated from CRM`);
     return updated;
   } catch (error) {
-    console.error('[CRM SYNC] Failed to update customer from CRM', error);
+    console.error('[CRM SYNC] Failed to update customer from CRM:', error.message);
     throw error;
   }
 };
@@ -418,6 +503,28 @@ export const checkCRMHealth = async (businessId) => {
       error: error.message,
     };
   }
+};
+
+/**
+ * Get sync metrics
+ */
+export const getSyncMetrics = () => {
+  return {
+    ...syncMetrics,
+    averageSyncTime: syncMetrics.transactionsSynced + syncMetrics.customersSynced > 0
+      ? (syncMetrics.totalSyncTime / (syncMetrics.transactionsSynced + syncMetrics.customersSynced)).toFixed(2)
+      : 0,
+  };
+};
+
+/**
+ * Reset sync metrics
+ */
+export const resetSyncMetrics = () => {
+  syncMetrics.transactionsSynced = 0;
+  syncMetrics.customersSynced = 0;
+  syncMetrics.failedSyncs = 0;
+  syncMetrics.totalSyncTime = 0;
 };
 
 /**
@@ -453,6 +560,7 @@ export const retryFailedSyncs = async () => {
             include: {
               items: true,
               customer: true,
+              business: true,
             },
           });
 
@@ -462,6 +570,9 @@ export const retryFailedSyncs = async () => {
         } else if (syncLog.entityType === 'customer') {
           const customer = await prisma.customer.findUnique({
             where: { id: syncLog.entityId },
+            include: {
+              business: true,
+            },
           });
 
           if (customer) {
@@ -488,7 +599,7 @@ export const retryFailedSyncs = async () => {
 
     console.log(`[CRM SYNC] Retry job completed`);
   } catch (error) {
-    console.error('[CRM SYNC] Failed to process retry queue', error);
+    console.error('[CRM SYNC] Failed to process retry queue:', error.message);
   }
 };
 
@@ -499,4 +610,6 @@ export default {
   updateCustomerFromCRM,
   checkCRMHealth,
   retryFailedSyncs,
+  getSyncMetrics,
+  resetSyncMetrics,
 };

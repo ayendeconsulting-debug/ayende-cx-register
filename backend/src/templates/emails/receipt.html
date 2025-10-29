@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Receipt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #4CAF50;
+            margin: 0;
+            font-size: 28px;
+        }
+        .business-info {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #666;
+        }
+        .transaction-info {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .transaction-info p {
+            margin: 5px 0;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .items-table th {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        .items-table td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .items-table tr:last-child td {
+            border-bottom: none;
+        }
+        .totals {
+            text-align: right;
+            margin-top: 20px;
+        }
+        .totals p {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .totals .total-line {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4CAF50;
+            border-top: 2px solid #4CAF50;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
+        .loyalty-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .loyalty-info p {
+            margin: 5px 0;
+            color: #856404;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{businessName}}</h1>
+            <p>Transaction Receipt</p>
+        </div>
+
+        <div class="business-info">
+            {{#if businessAddress}}<p>{{businessAddress}}</p>{{/if}}
+            {{#if businessPhone}}<p>Phone: {{businessPhone}}</p>{{/if}}
+            {{#if businessEmail}}<p>Email: {{businessEmail}}</p>{{/if}}
+        </div>
+
+        <div class="transaction-info">
+            <p><strong>Receipt #:</strong> {{transactionNumber}}</p>
+            <p><strong>Date:</strong> {{transactionDate}} {{transactionTime}}</p>
+            <p><strong>Customer:</strong> {{customerName}}</p>
+            <p><strong>Payment Method:</strong> {{paymentMethod}}</p>
+        </div>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th style="text-align: center;">Qty</th>
+                    <th style="text-align: right;">Price</th>
+                    <th style="text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each items}}
+                <tr>
+                    <td>{{this.name}}</td>
+                    <td style="text-align: center;">{{this.quantity}}</td>
+                    <td style="text-align: right;">${{this.unitPrice}}</td>
+                    <td style="text-align: right;">${{this.total}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <p>Subtotal: ${{subtotal}}</p>
+            {{#if discount}}
+            <p style="color: #4CAF50;">Discount: -${{discount}}</p>
+            {{/if}}
+            {{#if tax}}
+            <p>Tax: ${{tax}}</p>
+            {{/if}}
+            <p class="total-line">Total: ${{total}}</p>
+        </div>
+
+        {{#if loyaltyPointsEarned}}
+        <div class="loyalty-info">
+            <p><strong>🎉 Loyalty Points Earned: {{loyaltyPointsEarned}}</strong></p>
+            <p>Thank you for your continued support!</p>
+        </div>
+        {{/if}}
+
+        <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>Questions? Contact us at {{businessEmail}}</p>
+            <p>&copy; {{currentYear}} {{businessName}}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
