@@ -150,7 +150,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
     return { business, owner };
   });
 
-  // Send success response
+  // Send success response NEW
   return createdResponse(
     res,
     {
