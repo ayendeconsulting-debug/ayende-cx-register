@@ -25,14 +25,17 @@ export const registerBusiness = asyncHandler(async (req, res) => {
     businessState,
     businessZipCode,
     businessCountry,
-    
+
     // Owner Information
     ownerFirstName,
     ownerLastName,
     ownerEmail,
     ownerUsername,
     ownerPassword,
-    
+
+    // CRM Integration
+    externalTenantId,
+
     // Optional Settings
     currency = '$',
     currencyCode = 'USD',
@@ -86,6 +89,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
         businessState: businessState || null,
         businessZipCode: businessZipCode || null,
         businessCountry: businessCountry || 'US',
+        externalTenantId: externalTenantId || null,
         currency,
         currencyCode,
         timezone,
@@ -103,7 +107,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
 
     // 2. Create Owner Account (SUPER_ADMIN)
     const hashedPassword = await hashPassword(ownerPassword);
-    
+
     const owner = await tx.user.create({
       data: {
         businessId: business.id,
@@ -154,6 +158,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
         id: result.business.id,
         name: result.business.businessName,
         email: result.business.businessEmail,
+        externalTenantId: result.business.externalTenantId,
       },
       owner: result.owner,
     },
