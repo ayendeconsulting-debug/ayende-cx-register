@@ -37,6 +37,14 @@ const Products = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
+  // Category creation state
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    description: ''
+  });
+  const [categoryErrors, setCategoryErrors] = useState({});
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -82,6 +90,76 @@ const Products = () => {
     } catch (error) {
       console.error('Failed to load categories:', error);
     }
+  };
+
+  // Category creation handlers
+  const handleCategoryInputChange = (e) => {
+    const { name, value } = e.target;
+    setCategoryFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user types
+    if (categoryErrors[name]) {
+      setCategoryErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    
+    // Validate
+    const errors = {};
+    if (!categoryFormData.name.trim()) {
+      errors.name = 'Category name is required';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setCategoryErrors(errors);
+      return;
+    }
+    
+    try {
+      const response = await categoryService.createCategory(categoryFormData);
+      if (response.success) {
+        toast.success('Category created successfully');
+        await loadCategories();
+        
+        // Select the newly created category
+        setFormData(prev => ({ ...prev, categoryId: response.data.id }));
+        
+        // Close category form
+        setShowCategoryForm(false);
+        setCategoryFormData({ name: '', description: '' });
+        setCategoryErrors({});
+      }
+    } catch (error) {
+      if (error.response?.status === 400 && error.response?.data?.errors) {
+        const serverErrors = {};
+        const errorData = error.response.data.errors;
+        
+        if (Array.isArray(errorData)) {
+          errorData.forEach(err => {
+            serverErrors[err.field] = err.message;
+          });
+        } else if (typeof errorData === 'object') {
+          Object.assign(serverErrors, errorData);
+        }
+        
+        setCategoryErrors(serverErrors);
+        toast.error(error.response.data.message || 'Failed to create category');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to create category');
+      }
+    }
+  };
+
+  const cancelCategoryCreation = () => {
+    setShowCategoryForm(false);
+    setCategoryFormData({ name: '', description: '' });
+    setCategoryErrors({});
   };
 
   // Filter products
@@ -452,20 +530,77 @@ const Products = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category *
                   </label>
-                  <select
-                    name="categoryId"
-                    value={formData.categoryId}
-                    onChange={handleInputChange}
-                    className="input w-full"
-                    required
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
+                  
+                  {!showCategoryForm ? (
+                    <div className="space-y-2">
+                      <select
+                        name="categoryId"
+                        value={formData.categoryId}
+                        onChange={handleInputChange}
+                        className="input w-full"
+                        required
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryForm(true)}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create New Category
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 space-y-3">
+                      <div>
+                        <input
+                          type="text"
+                          name="name"
+                          value={categoryFormData.name}
+                          onChange={handleCategoryInputChange}
+                          placeholder="Category name"
+                          className={`input w-full text-sm ${
+                            categoryErrors.name ? 'border-red-500' : ''
+                          }`}
+                        />
+                        {categoryErrors.name && (
+                          <p className="mt-1 text-xs text-red-500">{categoryErrors.name}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          name="description"
+                          value={categoryFormData.description}
+                          onChange={handleCategoryInputChange}
+                          placeholder="Description (optional)"
+                          className="input w-full text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCreateCategory}
+                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
+                        >
+                          Create
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelCategoryCreation}
+                          className="text-xs bg-gray-200 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
