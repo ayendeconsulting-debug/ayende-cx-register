@@ -231,7 +231,7 @@ const POSTill = () => {
         items: cart.items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
-          price: item.price, // Include price for transaction items
+          unitPrice: parseFloat(item.price.toFixed(2)), // Use unitPrice instead of price
         })),
         subtotal: parseFloat(subtotal.toFixed(2)),
         taxAmount: parseFloat(taxAmount.toFixed(2)),
@@ -242,13 +242,14 @@ const POSTill = () => {
         changeGiven: parseFloat((paid - total).toFixed(2)),
       };
 
-      // Only add customerId if customer exists (support walk-in)
-      if (cart.customer?.id) {
+      // IMPORTANT: Only add customerId if customer exists and has valid ID
+      // This allows walk-in transactions without customer
+      if (cart.customer?.id && cart.customer.id !== undefined) {
         transactionData.customerId = cart.customer.id;
       }
       
       // Only redeem points if customer exists
-      if (cart.customer && cart.loyaltyPointsToRedeem && cart.loyaltyPointsToRedeem > 0) {
+      if (cart.customer?.id && cart.loyaltyPointsToRedeem && cart.loyaltyPointsToRedeem > 0) {
         transactionData.loyaltyPointsRedeemed = cart.loyaltyPointsToRedeem;
       }
 
