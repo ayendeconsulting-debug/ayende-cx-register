@@ -86,32 +86,63 @@ export const createTransaction = async (businessId, transactionData, userId) => 
 
   // Create transaction with all items
   const transaction = await prisma.$transaction(async (tx) => {
-    const newTransaction = await tx.transaction.create({
-      data: {
-        business: {
-          connect: { id: businessId }
-        },
-        customer: {
-          connect: { id: customerId }
-        },
-        ...(userId && { user: { connect: { id: userId } } }),
-        transactionNumber: transactionData.transactionNumber,
-        subtotal: transactionData.subtotal,
-        taxAmount: transactionData.taxAmount,
-        discountAmount: transactionData.discountAmount || 0,
-        total: transactionData.total,
-        paymentMethod: transactionData.paymentMethod,
-        amountPaid: transactionData.amountPaid,
-        changeGiven: transactionData.changeGiven || 0,
-        loyaltyPointsEarned: transactionData.loyaltyPointsEarned || 0,
-        loyaltyPointsRedeemed: transactionData.loyaltyPointsRedeemed || 0,
-        status: transactionData.status || 'COMPLETED',
-        ...(transactionData.shiftId && { shift: { connect: { id: transactionData.shiftId } } }),
-        notes: transactionData.notes || null,
-        items: {
-          create: enrichedItems,
+    // ============================================
+    // GENERATE TRANSACTION NUMBER
+    // ============================================
+    // Generate unique transaction number: TX-YYYYMMDD-XXXXX
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    
+    // Get count of transactions today for this business
+    const todayStart = new Date(today.setHours(0, 0, 0, 0));
+    const todayEnd = new Date(today.setHours(23, 59, 59, 999));
+    
+    const todayCount = await tx.transaction.count({
+      where: {
+        businessId,
+        createdAt: {
+          gte: todayStart,
+          lte: todayEnd,
         },
       },
+    });
+    
+    const transactionNumber = `TX-${dateStr}-${String(todayCount + 1).padStart(5, '0')}`;
+    
+    // ============================================
+    // CREATE TRANSACTION
+    // ============================================
+    const transactionCreateData = {
+      business: {
+        connect: { id: businessId }
+      },
+      // Only connect customer if customerId exists and is not undefined
+      ...(customerId && customerId !== undefined && {
+        customer: {
+          connect: { id: customerId }
+        }
+      }),
+      ...(userId && { user: { connect: { id: userId } } }),
+      transactionNumber: transactionNumber, // Use generated transaction number
+      subtotal: transactionData.subtotal,
+      taxAmount: transactionData.taxAmount,
+      discountAmount: transactionData.discountAmount || 0,
+      total: transactionData.total,
+      paymentMethod: transactionData.paymentMethod,
+      amountPaid: transactionData.amountPaid,
+      changeGiven: transactionData.changeGiven || 0,
+      loyaltyPointsEarned: transactionData.loyaltyPointsEarned || 0,
+      loyaltyPointsRedeemed: transactionData.loyaltyPointsRedeemed || 0,
+      status: transactionData.status || 'COMPLETED',
+      ...(transactionData.shiftId && { shift: { connect: { id: transactionData.shiftId } } }),
+      notes: transactionData.notes || null,
+      items: {
+        create: enrichedItems,
+      },
+    };
+    
+    const newTransaction = await tx.transaction.create({
+      data: transactionCreateData,
       include: {
         items: {
           include: {
