@@ -220,24 +220,31 @@ const POSTill = () => {
     setProcessing(true);
 
     try {
-      // Backend only needs productId and quantity - it fetches price from database
+      // Calculate totals
+      const subtotal = cart.subtotal || 0;
+      const taxAmount = cart.tax || 0;
+      const discountAmount = cart.discount || 0;
+      const total = cart.total || 0;
+
+      // Prepare transaction data with all required fields
       const transactionData = {
         items: cart.items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
+          price: item.price, // Include price for transaction items
         })),
+        subtotal: parseFloat(subtotal.toFixed(2)),
+        taxAmount: parseFloat(taxAmount.toFixed(2)),
+        discountAmount: parseFloat(discountAmount.toFixed(2)),
+        total: parseFloat(total.toFixed(2)),
         paymentMethod: paymentMethod,
-        amountPaid: parseFloat(paid),
+        amountPaid: parseFloat(paid.toFixed(2)),
+        changeGiven: parseFloat((paid - total).toFixed(2)),
       };
 
       // Only add customerId if customer exists (support walk-in)
       if (cart.customer?.id) {
         transactionData.customerId = cart.customer.id;
-      }
-
-      // Only add optional fields if they have values
-      if (cart.discount && cart.discount > 0) {
-        transactionData.discountAmount = cart.discount;
       }
       
       // Only redeem points if customer exists
@@ -265,7 +272,24 @@ const POSTill = () => {
     } catch (error) {
       console.error('Full transaction error:', error);
       console.error('Error response:', error.response);
-      const errorMsg = error.response?.data?.message || error.message || 'Transaction failed';
+      
+      // Better error handling with specific messages
+      let errorMsg = 'Transaction failed';
+      
+      if (error.response?.data?.errors) {
+        // Handle validation errors
+        const errors = error.response.data.errors;
+        if (Array.isArray(errors)) {
+          errorMsg = errors.map(e => e.message).join(', ');
+        } else if (typeof errors === 'object') {
+          errorMsg = Object.values(errors).join(', ');
+        }
+      } else if (error.response?.data?.message) {
+        errorMsg = error.response.data.message;
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      
       toast.error(errorMsg);
     } finally {
       setProcessing(false);
