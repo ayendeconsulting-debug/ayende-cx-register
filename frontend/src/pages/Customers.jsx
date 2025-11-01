@@ -51,6 +51,7 @@ const Customers = () => {
     notes: ''
   });
 
+  const [errors, setErrors] = useState({});
   const loyaltyTiers = ['ALL', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
   
   const tierColors = {
@@ -116,7 +117,17 @@ const Customers = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
   };
+
 
   const resetForm = () => {
     setFormData({
@@ -132,6 +143,7 @@ const Customers = () => {
       marketingOptIn: true,
       notes: ''
     });
+    setErrors({}); // Clear errors when resetting form
   };
 
   const openCreateModal = () => {
@@ -179,27 +191,48 @@ const Customers = () => {
     navigate('/pos');
     toast.success(`Starting transaction for ${customer.firstName} ${customer.lastName}`);
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Clear previous errors
+    setErrors({});
 
-    // Validation
-    if (!formData.firstName || !formData.lastName || !formData.phone) {
-      toast.error('First name, last name, and phone are required');
+    // Client-side validation
+    const newErrors = {};
+    
+    if (!formData.firstName?.trim()) {
+      newErrors.firstName = 'First name is required';
+    }
+    
+    if (!formData.lastName?.trim()) {
+      newErrors.lastName = 'Last name is required';
+    }
+    
+    if (!formData.email?.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    
+    if (!formData.phone?.trim()) {
+      newErrors.phone = 'Phone number is required';
+    }
+    
+    // If there are validation errors, show them and stop
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Please fix the errors in the form');
       return;
     }
 
     try {
       // Prepare data for submission
       const submitData = { ...formData };
-      
+
       // Convert date of birth to ISO-8601 DateTime format if provided
-      // Backend expects: "1973-11-13T00:00:00.000Z"
-      // HTML date input gives: "1973-11-13"
       if (submitData.dateOfBirth) {
         submitData.dateOfBirth = new Date(submitData.dateOfBirth + 'T00:00:00.000Z').toISOString();
       } else {
-        // Remove empty dateOfBirth to avoid validation errors
         delete submitData.dateOfBirth;
       }
 
@@ -210,15 +243,38 @@ const Customers = () => {
         await customerService.updateCustomer(selectedCustomer.id, submitData);
         toast.success('Customer updated successfully');
       }
-      
+
       setShowModal(false);
       resetForm();
       fetchCustomers();
+      
     } catch (error) {
-      toast.error(error.response?.data?.message || `Failed to ${modalMode} customer`);
-      console.error(`${modalMode} customer error:`, error);
+      console.error('Submit customer error:', error);
+      
+      // Handle server-side validation errors
+      if (error.response?.status === 400 && error.response?.data?.errors) {
+        const serverErrors = {};
+        const errorData = error.response.data.errors;
+        
+        if (Array.isArray(errorData)) {
+          // Format: [{ field: 'email', message: '...' }]
+          errorData.forEach(err => {
+            serverErrors[err.field] = err.message;
+          });
+        } else if (typeof errorData === 'object') {
+          // Format: { email: '...', phone: '...' }
+          Object.assign(serverErrors, errorData);
+        }
+        
+        setErrors(serverErrors);
+        toast.error(error.response.data.message || 'Please fix the errors in the form');
+      } else {
+        // Other errors
+        toast.error(error.response?.data?.message || 'Failed to save customer');
+      }
     }
   };
+
 
   const handleDelete = async (customerId, customerName) => {
     if (!window.confirm(`Are you sure you want to delete ${customerName}? This action cannot be undone.`)) {
@@ -525,9 +581,14 @@ const Customers = () => {
                       name="firstName"
                       value={formData.firstName}
                       onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.firstName ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter first name"
                     />
+                    {errors.firstName && (
+                      <p className="mt-1 text-sm text-red-500">{errors.firstName}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -538,9 +599,14 @@ const Customers = () => {
                       name="lastName"
                       value={formData.lastName}
                       onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.lastName ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter last name"
                     />
+                    {errors.lastName && (
+                      <p className="mt-1 text-sm text-red-500">{errors.lastName}</p>
+                    )}
                   </div>
                 </div>
 
@@ -555,22 +621,33 @@ const Customers = () => {
                       name="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
-                      required
                       placeholder="+1234567890"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.phone ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {errors.phone && (
+                      <p className="mt-1 text-sm text-red-500">{errors.phone}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">Format: +1234567890</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
+                      Email <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="customer@example.com"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {errors.email && (
+                      <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+                    )}
                   </div>
                 </div>
 
