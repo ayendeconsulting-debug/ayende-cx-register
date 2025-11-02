@@ -13,6 +13,9 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
+// Production POS Backend API (has correct CORS configuration)
+const API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1';
+
 const AcceptInvitation = () => {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -34,7 +37,7 @@ const AcceptInvitation = () => {
 
   const loadInvitation = async () => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/v1/invitations/details/${token}`);
+      const response = await axios.get(`${API_BASE_URL}/invitations/details/${token}`);
       setInvitation(response.data.data);
     } catch (error) {
       setError(error.response?.data?.message || 'Invalid or expired invitation');
@@ -69,7 +72,7 @@ const AcceptInvitation = () => {
     setSubmitting(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/v1/invitations/accept', {
+      const response = await axios.post(`${API_BASE_URL}/invitations/accept`, {
         invitationToken: token,
         username: formData.username,
         password: formData.password

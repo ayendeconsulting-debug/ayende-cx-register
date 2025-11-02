@@ -13,6 +13,9 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
+// Production POS Backend API (has correct CORS configuration)
+const API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1';
+
 const InviteUserModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -43,7 +46,7 @@ const InviteUserModal = ({ isOpen, onClose, onSuccess }) => {
 
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await axios.post('http://localhost:5000/api/v1/invitations', formData, {
+      const response = await axios.post(`${API_BASE_URL}/invitations`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -280,7 +283,7 @@ const ManageInvitations = () => {
   const loadInvitations = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await axios.get('http://localhost:5000/api/v1/invitations', {
+      const response = await axios.get(`${API_BASE_URL}/invitations`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -298,7 +301,7 @@ const ManageInvitations = () => {
     setActionLoading(id);
     try {
       const token = localStorage.getItem('accessToken');
-      await axios.post(`http://localhost:5000/api/v1/invitations/${id}/resend`, {}, {
+      await axios.post(`${API_BASE_URL}/invitations/${id}/resend`, {}, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -318,7 +321,7 @@ const ManageInvitations = () => {
     setActionLoading(id);
     try {
       const token = localStorage.getItem('accessToken');
-      await axios.delete(`http://localhost:5000/api/v1/invitations/${id}`, {
+      await axios.delete(`${API_BASE_URL}/invitations/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
