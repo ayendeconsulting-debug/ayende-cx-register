@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+// Production POS Backend API (has correct CORS configuration)
+const API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1';
 
 const BusinessRegistration = () => {
   const navigate = useNavigate();
@@ -149,7 +150,7 @@ const BusinessRegistration = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/registration/business`, formData);
+      await axios.post(`${API_BASE_URL}/registration/business`, formData);
       
       setSuccess(true);
       
