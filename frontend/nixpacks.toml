@@ -1,11 +1,11 @@
 ﻿[phases.setup]
-nixPkgs = ["nodejs_20"]
-
-[phases.install]
-cmds = ["npm ci"]
+nixPkgs = ['nodejs_20']
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ['npm ci', 'npm run build']
 
-[start]
-cmd = "npx serve -s dist -p $PORT"
+[phases.deploy]
+cmd = 'npx serve dist -l 8080'
+
+[variables]
+VITE_API_BASE_URL = 'https://pos.ayendecx.com/api/v1'
