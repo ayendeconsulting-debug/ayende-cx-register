@@ -13,6 +13,9 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
+// Use environment variable for API URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+
 const BusinessRegistration = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1: Business Info, 2: Owner Info, 3: Settings
@@ -66,7 +69,7 @@ const BusinessRegistration = () => {
     if (!value) return;
     
     try {
-      const response = await axios.post('http://localhost:5000/api/v1/registration/check-availability', {
+      const response = await axios.post(${API_BASE_URL}/registration/check-availability, {
         [field]: value
       });
       
@@ -147,7 +150,7 @@ const BusinessRegistration = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/v1/registration/business', formData);
+      const response = await axios.post(${API_BASE_URL}/registration/business, formData);
       
       setSuccess(true);
       
