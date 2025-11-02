@@ -69,7 +69,8 @@ const BusinessRegistration = () => {
     if (!value) return;
     
     try {
-      const response = await axios.post(${API_BASE_URL}/registration/check-availability, {
+      const response = await axios.post(`/registration/check-availability`,
+ {
         [field]: value
       });
       
@@ -150,7 +151,8 @@ const BusinessRegistration = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post(${API_BASE_URL}/registration/business, formData);
+      const response = await axios.post(`/registration/business`,
+ formData);
       
       setSuccess(true);
       
