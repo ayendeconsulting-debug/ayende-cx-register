@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { loginSuccess } from '../store/slices/authSlice';
+import apiClient from '../config/apiClient';
 import { 
-  CheckCircle, 
   AlertCircle, 
   Loader, 
   User, 
@@ -11,11 +11,8 @@ import {
   Building2,
   Mail
 } from 'lucide-react';
-import axios from 'axios';
 
-// Production POS Backend API (has correct CORS configuration)
-const API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1';
-
+// eslint-disable-next-line react/prop-types
 const AcceptInvitation = () => {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -33,11 +30,12 @@ const AcceptInvitation = () => {
 
   useEffect(() => {
     loadInvitation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const loadInvitation = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/invitations/details/${token}`);
+      const response = await apiClient.get(`/invitations/details/${token}`);
       setInvitation(response.data.data);
     } catch (error) {
       setError(error.response?.data?.message || 'Invalid or expired invitation');
@@ -72,7 +70,7 @@ const AcceptInvitation = () => {
     setSubmitting(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/invitations/accept`, {
+      const response = await apiClient.post(`/invitations/accept`, {
         invitationToken: token,
         username: formData.username,
         password: formData.password
@@ -134,7 +132,7 @@ const AcceptInvitation = () => {
             <Building2 className="w-8 h-8 text-blue-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            You're Invited!
+            You&apos;re Invited!
           </h1>
           <p className="text-gray-600">
             Join {invitation.businessName}
@@ -163,7 +161,7 @@ const AcceptInvitation = () => {
           {invitation.message && (
             <div className="mt-3 pt-3 border-t border-blue-200">
               <p className="text-sm text-gray-600 mb-1">Message from {invitation.inviterName}:</p>
-              <p className="text-sm text-gray-700 italic">"{invitation.message}"</p>
+              <p className="text-sm text-gray-700 italic">&quot;{invitation.message}&quot;</p>
             </div>
           )}
         </div>

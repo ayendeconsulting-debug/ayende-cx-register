@@ -11,11 +11,9 @@ import {
   UserPlus,
   Loader
 } from 'lucide-react';
-import axios from 'axios';
+import apiClient from '../config/apiClient';
 
-// Production POS Backend API (has correct CORS configuration)
-const API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1';
-
+// eslint-disable-next-line react/prop-types
 const InviteUserModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,12 +43,7 @@ const InviteUserModal = ({ isOpen, onClose, onSuccess }) => {
     setError('');
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await axios.post(`${API_BASE_URL}/invitations`, formData, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.post(`/invitations`, formData);
       
       setInvitationLink(response.data.data.invitation.invitationLink);
       setSuccess(true);
@@ -282,12 +275,7 @@ const ManageInvitations = () => {
 
   const loadInvitations = async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await axios.get(`${API_BASE_URL}/invitations`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get(`/invitations`);
       setInvitations(response.data.data);
     } catch (error) {
       console.error('Error loading invitations:', error);
@@ -300,12 +288,7 @@ const ManageInvitations = () => {
   const handleResend = async (id) => {
     setActionLoading(id);
     try {
-      const token = localStorage.getItem('accessToken');
-      await axios.post(`${API_BASE_URL}/invitations/${id}/resend`, {}, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      await apiClient.post(`/invitations/${id}/resend`, {});
       alert('Invitation resent successfully!');
       loadInvitations();
     } catch (error) {
@@ -320,12 +303,7 @@ const ManageInvitations = () => {
     
     setActionLoading(id);
     try {
-      const token = localStorage.getItem('accessToken');
-      await axios.delete(`${API_BASE_URL}/invitations/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      await apiClient.delete(`/invitations/${id}`);
       alert('Invitation revoked successfully!');
       loadInvitations();
     } catch (error) {
@@ -477,7 +455,7 @@ const ManageInvitations = () => {
 
                     {invitation.message && (
                       <p className="text-sm text-gray-600 italic bg-gray-50 p-3 rounded">
-                        "{invitation.message}"
+                        &quot;{invitation.message}&quot;
                       </p>
                     )}
                   </div>
