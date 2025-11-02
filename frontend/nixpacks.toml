@@ -8,4 +8,4 @@ cmds = ['npm ci', 'npm run build']
 cmd = 'npx serve dist -l 8080'
 
 [variables]
-VITE_API_BASE_URL = 'https://pos.ayendecx.com/api/v1'
+VITE_API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1'
