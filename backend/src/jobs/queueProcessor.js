@@ -1,275 +1,344 @@
 /**
- * Queue Processor
- * Background worker that processes the sync queue
- * Sends transactions and customers to CRM
+ * Queue Processor with Customer-First Logic
  * 
- * Run with: node src/jobs/queueProcessor.js
- * Or in production: PM2 or Railway worker process
+ * FIXES:
+ * - Ensures customers are synced to CRM before their transactions
+ * - Automatically adds missing customers to queue when processing transactions
+ * - Processes in correct order: CUSTOMER → TRANSACTION
+ * 
+ * This prevents "Customer not found" errors in CRM
  */
 
-import cron from 'node-cron';
-import syncQueueService from '../services/syncQueueService.js';
+import prisma from '../config/database.js';
 import { syncTransactionToCRM, syncCustomerToCRM } from '../services/crmSyncService.js';
 
-// Configuration from environment
-const ENABLE_PROCESSOR = process.env.ENABLE_QUEUE_PROCESSOR !== 'false'; // Enabled by default
-const PROCESS_INTERVAL = process.env.QUEUE_PROCESS_INTERVAL || '*/1 * * * *'; // Every minute
-const BATCH_SIZE = parseInt(process.env.QUEUE_BATCH_SIZE || '10');
-const ENABLE_CLEANUP = process.env.ENABLE_QUEUE_CLEANUP !== 'false'; // Enabled by default
-const CLEANUP_INTERVAL = process.env.QUEUE_CLEANUP_INTERVAL || '0 2 * * *'; // 2 AM daily
-const CLEANUP_DAYS = parseInt(process.env.QUEUE_CLEANUP_DAYS || '7');
+/**
+ * Get customer for a transaction
+ */
+async function getTransactionCustomer(transactionId) {
+  const transaction = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          isAnonymous: true,
+          externalId: true,
+          syncState: true,
+        }
+      }
+    }
+  });
+  
+  return transaction?.customer;
+}
+
+/**
+ * Check if customer is synced to CRM
+ */
+function isCustomerSynced(customer) {
+  // Customer is synced if:
+  // 1. Has externalId (CRM customer ID)
+  // 2. syncState is 'SYNCED'
+  return customer?.externalId && customer?.syncState === 'SYNCED';
+}
+
+/**
+ * Add customer to sync queue with high priority
+ */
+async function addCustomerToQueue(customerId, businessId) {
+  try {
+    // Check if customer already in queue
+    const existing = await prisma.syncQueue.findFirst({
+      where: {
+        entityType: 'CUSTOMER',
+        entityId: customerId,
+        status: { in: ['PENDING', 'PROCESSING', 'RETRY'] }
+      }
+    });
+
+    if (existing) {
+      console.log(`[QUEUE] Customer ${customerId} already in queue`);
+      return existing;
+    }
+
+    // Add customer to queue with HIGH priority
+    const queueItem = await prisma.syncQueue.create({
+      data: {
+        businessId,
+        entityType: 'CUSTOMER',
+        entityId: customerId,
+        operation: 'CREATE',
+        priority: 'HIGH',
+        status: 'PENDING',
+        retryCount: 0,
+      }
+    });
+
+    console.log(`[QUEUE] Added customer ${customerId} to sync queue (HIGH priority)`);
+    return queueItem;
+    
+  } catch (error) {
+    console.error(`[QUEUE] Error adding customer to queue:`, error);
+    throw error;
+  }
+}
 
 /**
  * Process a single queue item
- * @param {Object} queueItem - Queue item from database
- * @returns {Promise<boolean>} Success status
  */
-const processQueueItem = async (queueItem) => {
-  console.log(`[QUEUE PROCESSOR] Processing ${queueItem.entityType} ${queueItem.entityId}`);
+async function processQueueItem(item) {
+  console.log(`[QUEUE] Processing ${item.entityType}: ${item.entityId}`);
 
   try {
-    // Mark as processing
-    await syncQueueService.markAsProcessing(queueItem.id);
+    // Update status to PROCESSING
+    await prisma.syncQueue.update({
+      where: { id: item.id },
+      data: { status: 'PROCESSING' }
+    });
 
     let success = false;
 
-    // Process based on entity type
-    switch (queueItem.entityType.toLowerCase()) {
-      case 'transaction':
-        success = await syncTransactionToCRM(queueItem.entityId);
-        break;
+    // Handle TRANSACTION sync
+    if (item.entityType === 'TRANSACTION') {
+      // Check if customer is synced first
+      const customer = await getTransactionCustomer(item.entityId);
+      
+      if (!customer) {
+        throw new Error('Transaction customer not found');
+      }
 
-      case 'customer':
-        success = await syncCustomerToCRM(queueItem.entityId);
-        break;
+      // Skip anonymous customers
+      if (customer.isAnonymous) {
+        console.log(`[QUEUE] Skipping anonymous customer transaction`);
+        await prisma.syncQueue.update({
+          where: { id: item.id },
+          data: { 
+            status: 'SUCCESS',
+            processedAt: new Date(),
+            error: 'Anonymous customer - skipped'
+          }
+        });
+        return true;
+      }
 
-      default:
-        console.warn(`[QUEUE PROCESSOR] Unknown entity type: ${queueItem.entityType}`);
-        // Mark as failed for unknown types
-        await syncQueueService.markAsFailed(
-          queueItem.id,
-          `Unknown entity type: ${queueItem.entityType}`,
-          false // Don't retry
-        );
-        return false;
+      // Check if customer is synced to CRM
+      if (!isCustomerSynced(customer)) {
+        console.log(`[QUEUE] Customer ${customer.id} not synced yet - adding to queue`);
+        
+        // Add customer to queue with HIGH priority
+        await addCustomerToQueue(customer.id, item.businessId);
+        
+        // Reschedule this transaction for later (after customer syncs)
+        await prisma.syncQueue.update({
+          where: { id: item.id },
+          data: {
+            status: 'RETRY',
+            scheduledFor: new Date(Date.now() + 30000), // Retry in 30 seconds
+            error: 'Customer not synced yet - will retry after customer sync'
+          }
+        });
+        
+        console.log(`[QUEUE] Transaction ${item.entityId} rescheduled - waiting for customer sync`);
+        return false; // Will retry later
+      }
+
+      // Customer is synced, proceed with transaction sync
+      success = await syncTransactionToCRM(item.entityId);
+    }
+    
+    // Handle CUSTOMER sync
+    else if (item.entityType === 'CUSTOMER') {
+      success = await syncCustomerToCRM(item.entityId);
+    }
+    
+    else {
+      throw new Error(`Unknown entity type: ${item.entityType}`);
     }
 
+    // Update queue item based on result
     if (success) {
-      // Mark as success
-      await syncQueueService.markAsSuccess(queueItem.id);
-      console.log(`[QUEUE PROCESSOR] ✓ Successfully processed ${queueItem.entityType} ${queueItem.entityId}`);
+      await prisma.syncQueue.update({
+        where: { id: item.id },
+        data: {
+          status: 'SUCCESS',
+          processedAt: new Date(),
+          error: null
+        }
+      });
+      console.log(`[QUEUE] ✅ ${item.entityType} ${item.entityId} synced successfully`);
       return true;
     } else {
-      throw new Error('Sync function returned false');
+      throw new Error('Sync returned false');
     }
-  } catch (error) {
-    console.error(
-      `[QUEUE PROCESSOR] ✗ Failed to process ${queueItem.entityType} ${queueItem.entityId}:`,
-      error.message
-    );
 
-    // Mark as failed (will retry based on retry count)
-    await syncQueueService.markAsFailed(queueItem.id, error.message);
+  } catch (error) {
+    console.error(`[QUEUE] ❌ Error processing ${item.entityType} ${item.entityId}:`, error.message);
+
+    // Increment retry count
+    const newRetryCount = item.retryCount + 1;
+    const maxRetries = 3;
+
+    if (newRetryCount >= maxRetries) {
+      // Max retries reached - mark as FAILED
+      await prisma.syncQueue.update({
+        where: { id: item.id },
+        data: {
+          status: 'FAILED',
+          retryCount: newRetryCount,
+          error: error.message
+        }
+      });
+      console.error(`[QUEUE] Max retries reached for ${item.entityType} ${item.entityId}`);
+    } else {
+      // Schedule for retry with exponential backoff
+      const retryDelay = Math.pow(2, newRetryCount) * 60000; // 2min, 4min, 8min
+      const scheduledFor = new Date(Date.now() + retryDelay);
+      
+      await prisma.syncQueue.update({
+        where: { id: item.id },
+        data: {
+          status: 'RETRY',
+          retryCount: newRetryCount,
+          scheduledFor,
+          error: error.message
+        }
+      });
+      console.log(`[QUEUE] Scheduled retry ${newRetryCount}/${maxRetries} for ${item.entityType} ${item.entityId}`);
+    }
+
     return false;
   }
-};
+}
 
 /**
- * Process batch of pending items
+ * Process all pending items in priority order
  */
-const processPendingItems = async () => {
+export async function processQueue() {
   try {
-    console.log('[QUEUE PROCESSOR] Checking for pending items...');
+    console.log('\n╔═══════════════════════════════════════════╗');
+    console.log('║  SYNC QUEUE PROCESSOR - STARTING (V2)    ║');
+    console.log('╚═══════════════════════════════════════════╝\n');
 
-    // Get pending items (prioritize HIGH priority)
-    const pendingItems = await syncQueueService.getPendingItems(BATCH_SIZE);
-
-    if (pendingItems.length === 0) {
-      console.log('[QUEUE PROCESSOR] No pending items');
-      return;
-    }
-
-    console.log(`[QUEUE PROCESSOR] Found ${pendingItems.length} pending items`);
-
-    // Process items sequentially (to avoid overwhelming CRM)
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const item of pendingItems) {
-      const success = await processQueueItem(item);
-      if (success) {
-        successCount++;
-      } else {
-        failCount++;
+    // Reset stuck items (items in PROCESSING for more than 5 minutes)
+    const stuckThreshold = new Date(Date.now() - 5 * 60 * 1000);
+    const resetResult = await prisma.syncQueue.updateMany({
+      where: {
+        status: 'PROCESSING',
+        updatedAt: { lt: stuckThreshold }
+      },
+      data: {
+        status: 'RETRY',
+        scheduledFor: new Date()
       }
-
-      // Small delay between items to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    console.log(
-      `[QUEUE PROCESSOR] Batch complete: ${successCount} succeeded, ${failCount} failed`
-    );
-  } catch (error) {
-    console.error('[QUEUE PROCESSOR] Error processing batch:', error);
-  }
-};
-
-/**
- * Process retry items
- */
-const processRetryItems = async () => {
-  try {
-    console.log('[QUEUE PROCESSOR] Checking for retry items...');
-
-    const retryItems = await syncQueueService.getRetryItems(BATCH_SIZE);
-
-    if (retryItems.length === 0) {
-      return;
-    }
-
-    console.log(`[QUEUE PROCESSOR] Found ${retryItems.length} items to retry`);
-
-    // Process retry items
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const item of retryItems) {
-      const success = await processQueueItem(item);
-      if (success) {
-        successCount++;
-      } else {
-        failCount++;
-      }
-
-      // Delay between retries
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    console.log(
-      `[QUEUE PROCESSOR] Retry batch complete: ${successCount} succeeded, ${failCount} failed`
-    );
-  } catch (error) {
-    console.error('[QUEUE PROCESSOR] Error processing retries:', error);
-  }
-};
-
-/**
- * Reset stuck items that have been processing too long
- */
-const resetStuckItems = async () => {
-  try {
-    const resetCount = await syncQueueService.resetStuckItems(30); // 30 minutes
-    if (resetCount > 0) {
-      console.log(`[QUEUE PROCESSOR] Reset ${resetCount} stuck items`);
-    }
-  } catch (error) {
-    console.error('[QUEUE PROCESSOR] Error resetting stuck items:', error);
-  }
-};
-
-/**
- * Cleanup old completed items
- */
-const cleanupOldItems = async () => {
-  try {
-    console.log('[QUEUE PROCESSOR] Running cleanup...');
-    const deletedCount = await syncQueueService.cleanupOldItems(CLEANUP_DAYS);
-    console.log(`[QUEUE PROCESSOR] Cleanup complete: ${deletedCount} items deleted`);
-  } catch (error) {
-    console.error('[QUEUE PROCESSOR] Error during cleanup:', error);
-  }
-};
-
-/**
- * Print queue statistics
- */
-const printStats = async () => {
-  try {
-    const stats = await syncQueueService.getQueueStats();
-    console.log('[QUEUE PROCESSOR] Queue Stats:', {
-      pending: stats.pending,
-      processing: stats.processing,
-      retry: stats.retry,
-      failed: stats.failed,
-      total: stats.total,
     });
+    
+    if (resetResult.count > 0) {
+      console.log(`[QUEUE] Reset ${resetResult.count} stuck items`);
+    }
+
+    // Get queue statistics
+    const stats = await prisma.syncQueue.groupBy({
+      by: ['status'],
+      _count: true
+    });
+
+    const statsSummary = {
+      pending: 0,
+      processing: 0,
+      retry: 0,
+      failed: 0,
+      success: 0,
+      total: 0
+    };
+
+    stats.forEach(stat => {
+      statsSummary[stat.status.toLowerCase()] = stat._count;
+      statsSummary.total += stat._count;
+    });
+
+    console.log('[QUEUE STATS]');
+    console.log(`  Pending: ${statsSummary.pending}`);
+    console.log(`  Processing: ${statsSummary.processing}`);
+    console.log(`  Retry: ${statsSummary.retry}`);
+    console.log(`  Failed: ${statsSummary.failed}`);
+    console.log(`  Total: ${statsSummary.total}\n`);
+
+    // Process items in priority order:
+    // 1. HIGH priority CUSTOMERS (must sync before transactions)
+    // 2. HIGH priority items (other)
+    // 3. NORMAL priority items
+    // 4. RETRY items that are scheduled
+    // 5. LOW priority items
+
+    const itemsToProcess = await prisma.syncQueue.findMany({
+      where: {
+        status: { in: ['PENDING', 'RETRY'] },
+        OR: [
+          { scheduledFor: null },
+          { scheduledFor: { lte: new Date() } }
+        ]
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { entityType: 'asc' }, // CUSTOMER before TRANSACTION
+        { createdAt: 'asc' }
+      ],
+      take: 50 // Process in batches
+    });
+
+    console.log(`[QUEUE] Processing ${itemsToProcess.length} items\n`);
+
+    let processed = 0;
+    let successful = 0;
+    let failed = 0;
+
+    for (const item of itemsToProcess) {
+      const result = await processQueueItem(item);
+      processed++;
+      if (result) successful++;
+      else failed++;
+    }
+
+    console.log('\n╔═══════════════════════════════════════════╗');
+    console.log('║  SYNC QUEUE PROCESSOR - COMPLETED        ║');
+    console.log('╚═══════════════════════════════════════════╝\n');
+
+    console.log('[PROCESSING SUMMARY]');
+    console.log(`  Total Processed: ${processed}`);
+    console.log(`  Successful: ${successful}`);
+    console.log(`  Failed/Retry: ${failed}\n`);
+
+    return { processed, successful, failed };
+
   } catch (error) {
-    console.error('[QUEUE PROCESSOR] Error getting stats:', error);
+    console.error('[QUEUE] Fatal error in queue processor:', error);
+    throw error;
   }
-};
+}
 
 /**
- * Main processing loop
+ * Initialize queue processor (called from worker.js)
  */
-const processQueue = async () => {
-  console.log('[QUEUE PROCESSOR] Starting processing cycle...');
-
-  // Reset any stuck items first
-  await resetStuckItems();
-
-  // Process pending items
-  await processPendingItems();
-
-  // Process retry items
-  await processRetryItems();
-
-  // Print stats
-  await printStats();
-
-  console.log('[QUEUE PROCESSOR] Processing cycle complete\n');
-};
-
-/**
- * Start the queue processor
- */
-const startProcessor = () => {
-  if (!ENABLE_PROCESSOR) {
-    console.log('[QUEUE PROCESSOR] Processor is disabled (ENABLE_QUEUE_PROCESSOR=false)');
-    return;
-  }
-
-  console.log('='.repeat(60));
-  console.log('QUEUE PROCESSOR STARTED');
-  console.log('='.repeat(60));
-  console.log(`Process Interval: ${PROCESS_INTERVAL}`);
-  console.log(`Batch Size: ${BATCH_SIZE}`);
-  console.log(`Cleanup Enabled: ${ENABLE_CLEANUP}`);
-  if (ENABLE_CLEANUP) {
-    console.log(`Cleanup Interval: ${CLEANUP_INTERVAL}`);
-    console.log(`Cleanup Days: ${CLEANUP_DAYS}`);
-  }
-  console.log('='.repeat(60));
-
-  // Schedule main processing
-  cron.schedule(PROCESS_INTERVAL, async () => {
-    await processQueue();
+export function initializeQueueProcessor() {
+  console.log('[QUEUE] Queue processor initialized with customer-first logic');
+  
+  // Run immediately
+  processQueue().catch(err => {
+    console.error('[QUEUE] Error in initial queue processing:', err);
   });
 
-  // Schedule cleanup (if enabled)
-  if (ENABLE_CLEANUP) {
-    cron.schedule(CLEANUP_INTERVAL, async () => {
-      await cleanupOldItems();
+  // Schedule to run every 60 seconds
+  setInterval(() => {
+    processQueue().catch(err => {
+      console.error('[QUEUE] Error in queue processing:', err);
     });
-  }
+  }, 60000);
 
-  // Run once immediately on startup
-  console.log('[QUEUE PROCESSOR] Running initial processing cycle...');
-  processQueue();
+  console.log('[QUEUE] Queue processor running every 60 seconds');
+}
 
-  console.log('[QUEUE PROCESSOR] Scheduler running. Press Ctrl+C to stop.\n');
+export default {
+  processQueue,
+  initializeQueueProcessor
 };
-
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n[QUEUE PROCESSOR] Shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('\n[QUEUE PROCESSOR] Shutting down gracefully...');
-  process.exit(0);
-});
-
-// Start the processor
-startProcessor();
