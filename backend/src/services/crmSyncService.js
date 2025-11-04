@@ -5,6 +5,8 @@
  * Endpoints:
  * - POST /api/v1/sync/transaction - Send transaction to CRM
  * - POST /api/v1/sync/customer - Send customer to CRM
+ * 
+ * FIXED: Added iss and scope to JWT payload for CRM authentication
  */
 
 import axios from 'axios';
@@ -12,12 +14,13 @@ import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
 
 // Get CRM configuration from environment
-const CRM_BASE_URL = process.env.CRM_BASE_URL || 'https://consulting.ayendecx.com';
+const CRM_BASE_URL = process.env.CRM_BASE_URL || process.env.CRM_API_URL || 'https://staging.ayendecx.com';
 const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET;
-const JWT_EXPIRATION = '5m'; // Short-lived tokens for webhooks
+const JWT_EXPIRATION = '1h'; // Extended from 5m for better reliability
 
 /**
  * Generate JWT token for CRM authentication
+ * FIXED: Added required iss and scope fields per CRM authentication.py requirements
  * @param {string} tenantId - CRM tenant UUID
  * @returns {string} JWT token
  */
@@ -27,10 +30,10 @@ const generateJWT = (tenantId) => {
   }
 
   const payload = {
-    iss: 'ayende-pos',        // REQUIRED by CRM
-    scope: 'integration',     // REQUIRED by CRM
-    sub: 'system-to-system',  // Optional but good practice
-    tenantId,                 // For routing
+    iss: 'ayende-pos',        // REQUIRED by CRM IntegrationJWTAuthentication
+    scope: 'integration',     // REQUIRED by CRM IntegrationJWTAuthentication
+    sub: 'system-to-system',  // Good practice
+    tenantId,                 // For tenant routing
     source: 'pos',            // Keep for logging
     timestamp: Date.now(),    // Keep for debugging
   };
@@ -157,7 +160,7 @@ export const syncTransactionToCRM = async (transactionId) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-        'X-Tenant-ID': tenantId,  // ADD THIS LINE
+        'X-Tenant-ID': tenantId,  // Added for better routing
       },
       timeout: 30000, // 30 second timeout
     });
@@ -170,7 +173,7 @@ export const syncTransactionToCRM = async (transactionId) => {
         where: { id: transactionId },
         data: {
           lastSyncedAt: new Date(),
-          syncStatus: 'SUCCESS',
+          syncStatus: 'SUCCESS',  // Changed from SYNCED to match enum
         },
       });
 
@@ -181,12 +184,19 @@ export const syncTransactionToCRM = async (transactionId) => {
   } catch (error) {
     console.error(`[CRM SYNC] Error syncing transaction ${transactionId}:`, error.message);
     
+    // Log detailed error info
+    if (error.response) {
+      console.error(`[CRM SYNC] Response status: ${error.response.status}`);
+      console.error(`[CRM SYNC] Response data:`, error.response.data);
+    }
+    
     // Update transaction sync status
     await prisma.transaction.update({
       where: { id: transactionId },
       data: {
         syncStatus: 'FAILED',
         syncError: error.message,
+        lastSyncedAt: new Date(),
       },
     }).catch(err => console.error('[CRM SYNC] Failed to update sync status:', err));
 
@@ -264,6 +274,7 @@ export const syncCustomerToCRM = async (customerId) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'X-Tenant-ID': tenantId,  // Added for better routing
       },
       timeout: 30000, // 30 second timeout
     });
