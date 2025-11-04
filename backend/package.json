@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "worker": "node src/jobs/queueProcessor.js",
+    "worker:dev": "nodemon src/jobs/queueProcessor.js",
     "build": "prisma generate && prisma migrate deploy",
     "postinstall": "prisma generate",
     "migrate": "prisma migrate deploy",
