@@ -77,17 +77,16 @@ model Business {
   loyaltyTransactions    LoyaltyTransaction[]
   products               Product[]
   shifts                 Shift[]
+  syncQueues             SyncQueue[]
   SystemMapping          SystemMapping[]
   transactions           Transaction[]
   users                  User[]
   UserInvitation         UserInvitation[]
   stock_adjustments      stock_adjustments[]
   sync_logs              sync_logs[]
-  syncQueues             SyncQueue[]
 
   @@index([businessName])
   @@index([externalTenantId])
-
 }
 
 model Customer {
@@ -115,17 +114,17 @@ model Customer {
   businessId          String
   externalId          String?
   lastSyncedAt        DateTime?
-  syncStatus          SyncStatus?             @default(PENDING)
   customerSource      CustomerSource?         @default(POS)
-  syncState           CustomerSyncState?      @default(PENDING)
-  lastRefreshedAt     DateTime?               @db.Timestamp(6)
-  syncRetryCount      Int?                    @default(0)
-  syncError           String?
-  needsEnrichment     Boolean?                @default(false)
   isAnonymous         Boolean?                @default(false)
-  loyaltyPointsLocal  Int?                    @default(0)
-  loyaltyPointsCRM    Int?
+  lastRefreshedAt     DateTime?               @db.Timestamp(6)
   loyaltyLastSyncedAt DateTime?               @db.Timestamp(6)
+  loyaltyPointsCRM    Int?
+  loyaltyPointsLocal  Int?                    @default(0)
+  needsEnrichment     Boolean?                @default(false)
+  syncError           String?
+  syncRetryCount      Int?                    @default(0)
+  syncState           CustomerSyncState?      @default(PENDING)
+  syncStatus          SyncStatus?             @default(PENDING)
   business            Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
   reconciliations     LoyaltyReconciliation[]
   loyaltyTransactions LoyaltyTransaction[]
@@ -141,7 +140,6 @@ model Customer {
   @@index([isAnonymous])
   @@index([syncState])
   @@index([customerSource])
-
 }
 
 model Category {
@@ -224,8 +222,10 @@ model Transaction {
   externalId            String?
   syncedAt              DateTime?
   syncedToCRM           Boolean           @default(false)
-  syncedToCrm           Boolean?          @default(false)
   syncStatus            SyncStatus?       @default(PENDING)
+  syncedToCrm           Boolean?          @default(false)
+  syncError             String?           // ← ADD THIS LINE
+  lastSyncedAt          DateTime?         // ← ADD THIS LINE
   StockMovement         StockMovement[]
   business              Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customer              Customer?         @relation(fields: [customerId], references: [id])
@@ -285,41 +285,30 @@ model LoyaltyTransaction {
   @@index([createdAt])
 }
 
-// Add this model to your schema.prisma file
-
 model LoyaltyReconciliation {
-  id                  String   @id @default(uuid())
-  businessId          String
-  customerId          String
-  
-  // Reconciliation Details
-  detectedAt          DateTime @default(now())
-  posPoints           Int
-  crmPoints           Int
-  discrepancy         Int
-  
-  // Resolution - Using String instead of enum
-  action              String?
-  status              String   @default("PENDING")
-  resolvedBy          String?
-  resolvedAt          DateTime?
-  
-  // Audit Trail
-  notes               String?
-  errorMessage        String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  
-  // Relationships
-  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer            Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  
+  id           String    @id @default(uuid())
+  businessId   String
+  customerId   String
+  detectedAt   DateTime  @default(now())
+  posPoints    Int
+  crmPoints    Int
+  discrepancy  Int
+  action       String?
+  status       String    @default("PENDING")
+  resolvedBy   String?
+  resolvedAt   DateTime?
+  notes        String?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
   @@index([businessId])
   @@index([customerId])
   @@index([detectedAt])
   @@index([status])
   @@map("LoyaltyReconciliation")
-  
 }
 
 model Shift {
@@ -611,7 +600,6 @@ enum SyncStatus {
   SUCCESS
   FAILED
   RETRY_SCHEDULED
-
 }
 
 enum AdjustmentMovementType {
