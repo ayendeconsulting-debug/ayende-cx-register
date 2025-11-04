@@ -21,6 +21,7 @@ import integrationRoutes from './routes/integration.routes.js';
 // 🔗 PHASE 2C: Import webhook routes
 // ============================================
 import customerSyncRoutes from './routes/integration/customerSync.js';
+import integrationWebhookRoutes from './routes/integration-webhooks.js';
 import * as syncJob from './cron/syncJob.js';
 import { initializeReconciliationJob } from './cron/reconciliationJob.js';
 import reconciliationRoutes from './routes/reconciliationRoutes.js';
@@ -159,6 +160,7 @@ app.use('/api/v1/integration', integrationRoutes);
 // 🔗 PHASE 2C: Register webhook routes
 // ============================================
 app.use('/api/integration', customerSyncRoutes);
+app.use('/api/integration/webhook', integrationWebhookRoutes);
 app.use('/api/v1/reconciliation', reconciliationRoutes);
 
 // 404 handler
