@@ -27,13 +27,13 @@ const generateJWT = (tenantId) => {
   }
 
   const payload = {
-  iss: 'ayende-pos',
-  sub: 'system-to-system',
-  tenantId,
-  scope: 'integration',
-  source: 'pos',
-  timestamp: Date.now(),
-};
+    iss: 'ayende-pos',        // REQUIRED by CRM
+    scope: 'integration',     // REQUIRED by CRM
+    sub: 'system-to-system',  // Optional but good practice
+    tenantId,                 // For routing
+    source: 'pos',            // Keep for logging
+    timestamp: Date.now(),    // Keep for debugging
+  };
 
   return jwt.sign(payload, INTEGRATION_SECRET, {
     expiresIn: JWT_EXPIRATION,
