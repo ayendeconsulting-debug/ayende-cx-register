@@ -27,10 +27,13 @@ const generateJWT = (tenantId) => {
   }
 
   const payload = {
-    tenantId,
-    source: 'pos',
-    timestamp: Date.now(),
-  };
+  iss: 'ayende-pos',
+  sub: 'system-to-system',
+  tenantId,
+  scope: 'integration',
+  source: 'pos',
+  timestamp: Date.now(),
+};
 
   return jwt.sign(payload, INTEGRATION_SECRET, {
     expiresIn: JWT_EXPIRATION,
@@ -154,6 +157,7 @@ export const syncTransactionToCRM = async (transactionId) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'X-Tenant-ID': tenantId,  // ADD THIS LINE
       },
       timeout: 30000, // 30 second timeout
     });
@@ -166,7 +170,7 @@ export const syncTransactionToCRM = async (transactionId) => {
         where: { id: transactionId },
         data: {
           lastSyncedAt: new Date(),
-          syncStatus: 'SYNCED',
+          syncStatus: 'SUCCESS',
         },
       });
 
