@@ -11,4 +11,4 @@ if [ "$SERVICE_TYPE" = "worker" ]; then
 else
     echo "Starting API Server..."
     npm run start
-fi# Rebuild: 2025-11-04 23:00:58
+fi
