@@ -5,35 +5,23 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
-import adminRoutes from './routes/admin.js';
 import productRoutes from './routes/productRoutes.js';
-import adminRoutes from './routes/admin.js';
 import categoryRoutes from './routes/categoryRoutes.js';
-import adminRoutes from './routes/admin.js';
 import transactionRoutes from './routes/transactionRoutes.js';
-import adminRoutes from './routes/admin.js';
 import customerRoutes from './routes/customerRoutes.js';
-import adminRoutes from './routes/admin.js';
 import shiftRoutes from './routes/shiftRoutes.js';
-import adminRoutes from './routes/admin.js';
 import stockAdjustmentRoutes from './routes/stockAdjustmentRoutes.js';
-import adminRoutes from './routes/admin.js';
 import registrationRoutes from './routes/registration.routes.js';
-import adminRoutes from './routes/admin.js';
 import invitationRoutes from './routes/invitation.routes.js';
-import adminRoutes from './routes/admin.js';
 // ============================================
 // 🔗 INTEGRATION: Import integration routes
 // ============================================
 import integrationRoutes from './routes/integration.routes.js';
-import adminRoutes from './routes/admin.js';
 // ============================================
 // 🔗 PHASE 2C: Import webhook routes
 // ============================================
 import customerSyncRoutes from './routes/integration/customerSync.js';
-import adminRoutes from './routes/admin.js';
 import integrationWebhookRoutes from './routes/integration-webhooks.js';
-import adminRoutes from './routes/admin.js';
 import * as syncJob from './cron/syncJob.js';
 import { initializeReconciliationJob } from './cron/reconciliationJob.js';
 import reconciliationRoutes from './routes/reconciliationRoutes.js';
