@@ -100,4 +100,30 @@ router.post('/bulk-sync-customers', async (req, res) => {
   }
 });
 
+// POST /api/admin/retry-failed
+router.post('/retry-failed', async (req, res) => {
+  try {
+    const result = await prisma.syncQueue.updateMany({
+      where: {
+        status: { in: ['FAILED', 'RETRY'] }
+      },
+      data: {
+        status: 'PENDING',
+        scheduledFor: null,
+        retryCount: 0
+      }
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Failed items reset to pending',
+      count: result.count
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 export default router;
