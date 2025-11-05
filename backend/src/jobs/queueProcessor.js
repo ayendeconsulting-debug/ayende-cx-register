@@ -51,7 +51,7 @@ async function addCustomerToQueue(customerId, businessId) {
     // Check if customer already in queue
     const existing = await prisma.syncQueue.findFirst({
       where: {
-        entityType: 'CUSTOMER',
+        entityType: 'customer',
         entityId: customerId,
         status: { in: ['PENDING', 'PROCESSING', 'RETRY'] }
       }
@@ -66,7 +66,7 @@ async function addCustomerToQueue(customerId, businessId) {
     const queueItem = await prisma.syncQueue.create({
       data: {
         businessId,
-        entityType: 'CUSTOMER',
+        entityType: 'customer',
         entityId: customerId,
         operation: 'CREATE',
         priority: 'HIGH',
@@ -100,7 +100,7 @@ async function processQueueItem(item) {
     let success = false;
 
     // Handle TRANSACTION sync
-    if (item.entityType === 'TRANSACTION') {
+    if (item.entityType === 'transaction') {
       // Check if customer is synced first
       const customer = await getTransactionCustomer(item.entityId);
       
@@ -148,7 +148,7 @@ async function processQueueItem(item) {
     }
     
     // Handle CUSTOMER sync
-    else if (item.entityType === 'CUSTOMER') {
+    else if (item.entityType === 'customer') {
       success = await syncCustomerToCRM(item.entityId);
     }
     
