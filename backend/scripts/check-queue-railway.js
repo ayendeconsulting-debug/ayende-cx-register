@@ -1,7 +1,7 @@
 // Check Queue State - Run on Railway
 // Usage: node scripts/check-queue-railway.js
 
-import prisma from './src/config/database.js';
+import prisma from '../src/config/database.js';
 
 async function checkQueue() {
   try {
