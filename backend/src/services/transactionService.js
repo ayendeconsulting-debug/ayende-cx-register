@@ -240,12 +240,21 @@ export const createTransaction = async (businessId, transactionData, userId) => 
         payload: null,
       });
       console.log(`[SYNC] Transaction ${transaction.transactionNumber} added to sync queue`);
-    } else if (customer && customer.isAnonymous) {
-      console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, skipping sync`);
+
+    } else if (!transaction.customerId) {
+  console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, adding to sync queue`);
+  // Add anonymous transaction to sync queue
+      await syncQueueService.addToQueue({
+        businessId: transaction.businessId,
+        entityType: 'transaction',
+        entityId: transaction.id,
+        operation: 'CREATE',
+        priority: 'NORMAL',
+        payload: null,
+      });
     }
-  } else if (!transaction.customerId) {
-    console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} has no customer (anonymous), skipping sync`);
   }
+  
 } catch (error) {
   // Log error but don't fail the transaction
   console.error(`[SYNC ERROR] Failed to add transaction to sync queue:`, error.message);
