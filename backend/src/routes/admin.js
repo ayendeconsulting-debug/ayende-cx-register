@@ -45,7 +45,7 @@ router.post('/bulk-sync-customers', async (req, res) => {
     for (const customer of customers) {
       const existing = await prisma.syncQueue.findFirst({
         where: {
-          entityType: 'CUSTOMER',
+          entityType: 'customer',
           entityId: customer.id,
           status: { in: ['PENDING', 'PROCESSING', 'RETRY'] }
         }
@@ -59,7 +59,7 @@ router.post('/bulk-sync-customers', async (req, res) => {
       await prisma.syncQueue.create({
         data: {
           businessId: customer.businessId,
-          entityType: 'CUSTOMER',
+          entityType: 'customer',
           entityId: customer.id,
           operation: 'CREATE',
           priority: 'HIGH',
