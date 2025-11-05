@@ -1,15 +1,16 @@
 /**
- * CRM Integration Service
+ * CRM Integration Service - UPDATED FOR ANONYMOUS TRANSACTIONS
  * Handles synchronization between POS and CRM systems
  * 
  * This service sends data from POS (source of truth for transactions)
  * to CRM (source of truth for customer profiles)
  * 
- * OPTIMIZATIONS:
- * - Added business.externalTenantId for correct tenant resolution
- * - Enhanced error logging with context
- * - Added performance metrics tracking
- * - Improved validation and error messages
+ * CHANGES IN THIS VERSION:
+ * - Added support for anonymous transaction sync
+ * - Transactions with anonymous customers now include isAnonymous flag
+ * - customerId sent as null for anonymous transactions
+ * 
+ * INSTRUCTIONS: Replace src/services/crmIntegrationService.js with this file
  */
 
 import axios from 'axios';
@@ -27,6 +28,7 @@ const MAX_RETRY_ATTEMPTS = parseInt(process.env.SYNC_RETRY_ATTEMPTS || '3');
 const syncMetrics = {
   transactionsSynced: 0,
   customersSynced: 0,
+  anonymousTransactionsSynced: 0,  // NEW: Track anonymous transactions
   failedSyncs: 0,
   totalSyncTime: 0,
 };
@@ -160,6 +162,8 @@ const validateBusinessRelation = (entity, entityType) => {
 /**
  * Sync transaction to CRM (Real-time)
  * Called immediately after transaction is completed in POS
+ * 
+ * UPDATED: Now supports anonymous transactions
  */
 export const syncTransactionToCRM = async (transaction) => {
   if (!ENABLE_SYNC) {
@@ -168,7 +172,12 @@ export const syncTransactionToCRM = async (transaction) => {
   }
 
   const syncStartTime = Date.now();
-  console.log(`[CRM SYNC] Syncing transaction ${transaction.transactionNumber} to CRM`);
+  
+  // NEW: Check if this is an anonymous transaction
+  const isAnonymous = transaction.isAnonymousTransaction || transaction.customer?.isAnonymous || false;
+  
+  const transactionType = isAnonymous ? 'ANONYMOUS transaction' : 'transaction';
+  console.log(`[CRM SYNC] Syncing ${transactionType} ${transaction.transactionNumber} to CRM`);
 
   try {
     // Validate and extract CRM tenant ID
@@ -181,8 +190,13 @@ export const syncTransactionToCRM = async (transaction) => {
       transactionId: transaction.id,
       transactionNumber: transaction.transactionNumber,
       tenantId: tenantId,
-      customerId: transaction.customerId,
-      customerEmail: transaction.customer?.email,
+      
+      // NEW: Include anonymous flag
+      isAnonymous: isAnonymous,
+      
+      // NEW: For anonymous transactions, don't send customerId
+      customerId: isAnonymous ? null : transaction.customerId,
+      customerEmail: isAnonymous ? null : transaction.customer?.email,
       
       // Financial data
       amount: parseFloat(transaction.subtotal),
@@ -197,9 +211,9 @@ export const syncTransactionToCRM = async (transaction) => {
       amountPaid: parseFloat(transaction.amountPaid),
       changeGiven: parseFloat(transaction.changeGiven),
       
-      // Loyalty
-      pointsEarned: transaction.loyaltyPointsEarned || 0,
-      pointsRedeemed: transaction.loyaltyPointsRedeemed || 0,
+      // Loyalty (only for non-anonymous)
+      pointsEarned: isAnonymous ? 0 : (transaction.loyaltyPointsEarned || 0),
+      pointsRedeemed: isAnonymous ? 0 : (transaction.loyaltyPointsRedeemed || 0),
       
       // Items
       items: transaction.items?.map(item => ({
@@ -251,18 +265,24 @@ export const syncTransactionToCRM = async (transaction) => {
     );
 
     // Update metrics
-    syncMetrics.transactionsSynced++;
+    if (isAnonymous) {
+      syncMetrics.anonymousTransactionsSynced++;
+    } else {
+      syncMetrics.transactionsSynced++;
+    }
+    
     const syncDuration = Date.now() - syncStartTime;
     syncMetrics.totalSyncTime += syncDuration;
 
-    console.log(`[CRM SYNC] Transaction ${transaction.transactionNumber} synced successfully (${syncDuration}ms)`);
+    console.log(`[CRM SYNC] ${transactionType} ${transaction.transactionNumber} synced successfully (${syncDuration}ms)`);
   } catch (error) {
     const syncDuration = Date.now() - syncStartTime;
     syncMetrics.failedSyncs++;
     
-    console.error(`[CRM SYNC] Failed to sync transaction ${transaction.transactionNumber} (${syncDuration}ms)`, {
+    console.error(`[CRM SYNC] Failed to sync ${transactionType} ${transaction.transactionNumber} (${syncDuration}ms)`, {
       error: error.message,
       transactionId: transaction.id,
+      isAnonymous: isAnonymous,
       tenantId: transaction.business?.externalTenantId || 'missing',
     });
 
@@ -273,7 +293,7 @@ export const syncTransactionToCRM = async (transaction) => {
       transaction.id,
       transaction.businessId,
       'FAILED',
-      { transactionId: transaction.id },
+      { transactionId: transaction.id, isAnonymous: isAnonymous },
       error
     );
 
@@ -305,17 +325,22 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
     const payload = {
       customerId: customer.id,
       tenantId: tenantId,
+      operation: operation,
+      
+      // Basic info
       email: customer.email,
       firstName: customer.firstName,
       lastName: customer.lastName,
       phone: customer.phone,
+      dateOfBirth: customer.dateOfBirth?.toISOString() || null,
+      
+      // Address
       address: customer.address,
       city: customer.city,
       postalCode: customer.postalCode,
       country: customer.country,
-      dateOfBirth: customer.dateOfBirth?.toISOString() || null,
       
-      // Loyalty data (POS is source of truth)
+      // Loyalty
       loyaltyPoints: customer.loyaltyPoints || 0,
       loyaltyTier: customer.loyaltyTier || 'BRONZE',
       totalSpent: parseFloat(customer.totalSpent || 0),
@@ -511,8 +536,8 @@ export const checkCRMHealth = async (businessId) => {
 export const getSyncMetrics = () => {
   return {
     ...syncMetrics,
-    averageSyncTime: syncMetrics.transactionsSynced + syncMetrics.customersSynced > 0
-      ? (syncMetrics.totalSyncTime / (syncMetrics.transactionsSynced + syncMetrics.customersSynced)).toFixed(2)
+    averageSyncTime: syncMetrics.transactionsSynced + syncMetrics.customersSynced + syncMetrics.anonymousTransactionsSynced > 0
+      ? (syncMetrics.totalSyncTime / (syncMetrics.transactionsSynced + syncMetrics.customersSynced + syncMetrics.anonymousTransactionsSynced)).toFixed(2)
       : 0,
   };
 };
@@ -523,6 +548,7 @@ export const getSyncMetrics = () => {
 export const resetSyncMetrics = () => {
   syncMetrics.transactionsSynced = 0;
   syncMetrics.customersSynced = 0;
+  syncMetrics.anonymousTransactionsSynced = 0;
   syncMetrics.failedSyncs = 0;
   syncMetrics.totalSyncTime = 0;
 };
