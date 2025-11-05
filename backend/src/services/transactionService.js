@@ -241,7 +241,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
       });
       console.log(`[SYNC] Transaction ${transaction.transactionNumber} added to sync queue`);
 
-    } else if (!transaction.customerId) {
+    } else if (!transaction.customerId && process.env.ENABLE_REALTIME_SYNC === 'true') {
   console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, adding to sync queue`);
   // Add anonymous transaction to sync queue
       await syncQueueService.addToQueue({
