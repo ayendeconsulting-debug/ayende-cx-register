@@ -220,31 +220,38 @@ export const createTransaction = async (businessId, transactionData, userId) => 
   // ============================================
   // 🔗 INTEGRATION: Phase 2D - Add to sync queue
   // ============================================
-  try {
-    // Only sync if customer is not anonymous and realtime sync is enabled
-    const customer = await prisma.customer.findUnique({ where: { id: transaction.customerId }, select: { isAnonymous: true } });
+ try {
+  // Only sync if customer exists (not anonymous transaction)
+  if (transaction.customerId && process.env.ENABLE_REALTIME_SYNC === 'true') {
+    const customer = await prisma.customer.findUnique({ 
+      where: { id: transaction.customerId }, 
+      select: { isAnonymous: true } 
+    });
     
-    // Only sync if customer exists, is not anonymous, and realtime sync is enabled
-    if (customer && !customer.isAnonymous && process.env.ENABLE_REALTIME_SYNC === 'true') {
+    // Only sync if customer exists and is not anonymous
+    if (customer && !customer.isAnonymous) {
       // Add transaction to sync queue
-        await syncQueueService.addToQueue({
-          businessId: transaction.businessId,
-          entityType: 'transaction',
-          entityId: transaction.id,
-          operation: 'CREATE',
-          priority: 'HIGH',
-          payload: null,
-        });
-        console.log(`[SYNC] Transaction ${transaction.transactionNumber} added to sync queue`);
+      await syncQueueService.addToQueue({
+        businessId: transaction.businessId,
+        entityType: 'transaction',
+        entityId: transaction.id,
+        operation: 'CREATE',
+        priority: 'HIGH',
+        payload: null,
+      });
+      console.log(`[SYNC] Transaction ${transaction.transactionNumber} added to sync queue`);
     } else if (customer && customer.isAnonymous) {
       console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, skipping sync`);
     }
-  } catch (error) {
-    // Log error but don't fail the transaction
-    console.error(`[SYNC ERROR] Failed to add transaction to sync queue:`, error.message);
+  } else if (!transaction.customerId) {
+    console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} has no customer (anonymous), skipping sync`);
   }
+} catch (error) {
+  // Log error but don't fail the transaction
+  console.error(`[SYNC ERROR] Failed to add transaction to sync queue:`, error.message);
+}
 
-  return transaction;
+return transaction;
 };
 
 /**
@@ -453,4 +460,4 @@ export const getTransactionAnalytics = async (businessId, filters = {}) => {
     anonymousTransactionCount: anonymousCount,
     registeredTransactionCount: transactionCount - anonymousCount,
   };
-};
+}
