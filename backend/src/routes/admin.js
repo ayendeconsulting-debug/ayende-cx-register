@@ -109,8 +109,8 @@ router.post('/retry-failed', async (req, res) => {
       },
       data: {
         status: 'PENDING',
-        scheduledFor: null,
-        retryCount: 0
+        retryCount: 0,
+        scheduledFor: new Date()  // Set to now instead of null
       }
     });
     
@@ -126,4 +126,5 @@ router.post('/retry-failed', async (req, res) => {
     });
   }
 });
+
 export default router;
