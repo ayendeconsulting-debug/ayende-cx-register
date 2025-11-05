@@ -243,9 +243,19 @@ export const createTransaction = async (businessId, transactionData, userId) => 
     } else if (customer && customer.isAnonymous) {
       console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, skipping sync`);
     }
-  } else if (!transaction.customerId) {
-    console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} has no customer (anonymous), skipping sync`);
-  }
+    } else if (!transaction.customerId && process.env.ENABLE_REALTIME_SYNC === 'true') {
+  console.log(`[TRANSACTION] Transaction ${transaction.transactionNumber} is anonymous, adding to sync queue`);
+  // Add anonymous transaction to sync queue
+  await syncQueueService.addToQueue({
+    businessId: transaction.businessId,
+    entityType: 'transaction',
+    entityId: transaction.id,
+    operation: 'CREATE',
+    priority: 'NORMAL',
+    payload: null,
+  });
+}
+
 } catch (error) {
   // Log error but don't fail the transaction
   console.error(`[SYNC ERROR] Failed to add transaction to sync queue:`, error.message);
