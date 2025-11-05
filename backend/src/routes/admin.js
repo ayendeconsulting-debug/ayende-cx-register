@@ -9,7 +9,6 @@ router.post('/bulk-sync-customers', async (req, res) => {
   try {
     console.log('[BULK SYNC] Starting bulk customer sync...');
     
-    // Get business
     const business = await prisma.business.findFirst({
       select: { id: true, businessName: true }
     });
@@ -18,7 +17,6 @@ router.post('/bulk-sync-customers', async (req, res) => {
       return res.status(400).json({ error: 'No business found' });
     }
     
-    // Get all unsynced customers
     const customers = await prisma.customer.findMany({
       where: {
         isAnonymous: false,
@@ -38,14 +36,13 @@ router.post('/bulk-sync-customers', async (req, res) => {
       }
     });
     
-    console.log([BULK SYNC] Found ${customers.length} unsynced customers);
+    console.log(`[BULK SYNC] Found ${customers.length} unsynced customers`);
     
     let added = 0;
     let skipped = 0;
     const addedCustomers = [];
     
     for (const customer of customers) {
-      // Check if already in queue
       const existing = await prisma.syncQueue.findFirst({
         where: {
           entityType: 'CUSTOMER',
@@ -59,7 +56,6 @@ router.post('/bulk-sync-customers', async (req, res) => {
         continue;
       }
       
-      // Add to queue
       await prisma.syncQueue.create({
         data: {
           businessId: customer.businessId,
@@ -75,14 +71,14 @@ router.post('/bulk-sync-customers', async (req, res) => {
       added++;
       addedCustomers.push({
         id: customer.id,
-        name: ` ${customer.lastName}`,
+        name: `${customer.firstName} ${customer.lastName}`,
         email: customer.email
       });
       
-      console.log([BULK SYNC] ? Added: ${customer.firstName} ${customer.lastName}`);
+      console.log(`[BULK SYNC] Added: ${customer.firstName} ${customer.lastName}`);
     }
     
-    console.log([BULK SYNC] Complete - Added: ${added}, Skipped: ${skipped}`);
+    console.log(`[BULK SYNC] Complete - Added: ${added}, Skipped: ${skipped}`);
     
     return res.json({
       success: true,
