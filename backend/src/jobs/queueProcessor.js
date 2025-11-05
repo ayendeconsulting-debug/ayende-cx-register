@@ -274,10 +274,7 @@ export async function processQueue() {
     const itemsToProcess = await prisma.syncQueue.findMany({
       where: {
         status: { in: ['PENDING', 'RETRY'] },
-        OR: [
-          { scheduledFor: null },
-          { scheduledFor: { lte: new Date() } }
-        ]
+        scheduledFor: { lte: new Date() }
       },
       orderBy: [
         { priority: 'desc' },
