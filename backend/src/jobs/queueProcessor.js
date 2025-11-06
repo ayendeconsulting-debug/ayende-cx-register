@@ -61,7 +61,8 @@ const processQueueItem = async (queueItem) => {
 
         // CHANGED: No longer skip anonymous transactions
         // Instead, mark the entity as anonymous for CRM to handle
-        if (entity.customer?.isAnonymous) {
+        // Check if customer is null (no customer selected) OR if customer is marked as anonymous
+        if (!entity.customer || entity.customer?.isAnonymous) {
           console.log(`[QUEUE PROCESSOR] Processing ANONYMOUS transaction: ${entityId}`);
           entity.isAnonymousTransaction = true;
         } else {
@@ -377,7 +378,8 @@ export const processEntityImmediately = async (entityType, entityId, businessId)
 
         if (entity) {
           // CHANGED: Process anonymous transactions
-          if (entity.customer?.isAnonymous) {
+          // Check if customer is null OR if customer is marked as anonymous
+          if (!entity.customer || entity.customer?.isAnonymous) {
             console.log(`[QUEUE PROCESSOR] Immediate sync of ANONYMOUS transaction: ${entityId}`);
             entity.isAnonymousTransaction = true;
           }
