@@ -11,8 +11,8 @@
  */
 
 import prisma from '../config/database.js';
-import * as syncQueueService from './syncQueueService.js';
-import * as crmIntegrationService from './crmIntegrationService.js';
+import * as syncQueueService from '../services/syncQueueService.js';
+import * as crmIntegrationService from '../services/crmIntegrationService.js';
 
 console.log('[DIAGNOSTIC] syncQueueProcessor.js module loaded at:', new Date().toISOString());
 
