@@ -158,11 +158,14 @@ export const createProduct = async (businessId, productData, userId) => {
     throw new AppError('Product with this SKU already exists', 400);
   }
 
-  // Check if barcode already exists in this business (if provided)
-  if (productData.barcode) {
+  // FIXED: Normalize barcode - treat empty strings and whitespace as null
+  const barcode = productData.barcode?.trim() || null;
+
+  // Check if barcode already exists in this business (only if barcode has actual content)
+  if (barcode) {
     const existingBarcode = await prisma.product.findFirst({
       where: { 
-        barcode: productData.barcode,
+        barcode: barcode,
         businessId
       },
     });
@@ -189,6 +192,7 @@ export const createProduct = async (businessId, productData, userId) => {
     data: {
       businessId,
       ...productData,
+      barcode: barcode, // FIXED: Use normalized barcode (null if empty)
       price: parseFloat(productData.price),
       costPrice: productData.costPrice ? parseFloat(productData.costPrice) : null,
       stockQuantity: parseInt(productData.stockQuantity) || 0,
@@ -260,10 +264,14 @@ export const updateProduct = async (businessId, id, productData, userId) => {
   }
 
   // Check if barcode is being changed and if it already exists in this business
-  if (productData.barcode && productData.barcode !== existingProduct.barcode) {
+  // FIXED: Normalize barcode for comparison
+  const newBarcode = productData.barcode?.trim() || null;
+  const oldBarcode = existingProduct.barcode?.trim() || null;
+  
+  if (newBarcode && newBarcode !== oldBarcode) {
     const existingBarcode = await prisma.product.findFirst({
       where: { 
-        barcode: productData.barcode,
+        barcode: newBarcode,
         businessId
       },
     });
@@ -293,6 +301,11 @@ export const updateProduct = async (businessId, id, productData, userId) => {
   if (updateData.costPrice) updateData.costPrice = parseFloat(updateData.costPrice);
   if (updateData.lowStockAlert) updateData.lowStockAlert = parseInt(updateData.lowStockAlert);
   if (updateData.loyaltyPoints) updateData.loyaltyPoints = parseInt(updateData.loyaltyPoints);
+  
+  // FIXED: Normalize barcode in update data
+  if ('barcode' in updateData) {
+    updateData.barcode = updateData.barcode?.trim() || null;
+  }
 
   // Update product
   const product = await prisma.product.update({
