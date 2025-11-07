@@ -6,14 +6,15 @@
  * 
  * Endpoints:
  * - POST /api/v1/webhooks/customer - Receive customer updates from CRM
+ * - GET /api/v1/webhooks/health - Health check endpoint
  */
 
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import prisma from '../config/database.js';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 const router = express.Router();
-
 const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET;
 
 /**

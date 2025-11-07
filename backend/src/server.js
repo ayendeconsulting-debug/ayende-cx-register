@@ -22,6 +22,10 @@ import integrationRoutes from './routes/integration.routes.js';
 // ============================================
 import customerSyncRoutes from './routes/integration/customerSync.js';
 import integrationWebhookRoutes from './routes/integration-webhooks.js';
+// ============================================
+// 🔗 CRM → POS WEBHOOKS: Import webhook receiver
+// ============================================
+import webhookRoutes from './routes/webhooks.js';
 import * as syncJob from './cron/syncJob.js';
 import { initializeReconciliationJob } from './cron/reconciliationJob.js';
 import reconciliationRoutes from './routes/reconciliationRoutes.js';
@@ -162,6 +166,10 @@ app.use('/api/v1/integration', integrationRoutes);
 // ============================================
 app.use('/api/integration', customerSyncRoutes);
 app.use('/api/integration/webhook', integrationWebhookRoutes);
+// ============================================
+// 🔗 CRM → POS WEBHOOKS: Register webhook receiver routes
+// ============================================
+app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/reconciliation', reconciliationRoutes);
 app.use('/api/admin', adminRoutes);
 
@@ -185,6 +193,7 @@ app.listen(PORT, () => {
     ║   API: /api/${API_VERSION.padEnd(30)}║
     ║   🔗 Integration: ENABLED                 ║
     ║   🔗 Webhooks: ENABLED (Phase 2C)         ║
+    ║   🔗 CRM Webhooks: ENABLED (CRM→POS)      ║
     ║   🔗 Sync Job: ENABLED (Phase 2D)         ║
     ╚═══════════════════════════════════════╝
   `);
@@ -200,7 +209,7 @@ app.listen(PORT, () => {
       console.error('  ✗ Failed to initialize sync job:', error.message);
     }
   } else {
-    console.log('  ⚠ Sync job disabled (ENABLE_REALTIME_SYNC=false)\n');
+    console.log('  ⚠  Sync job disabled (ENABLE_REALTIME_SYNC=false)\n');
   }
   // ============================================
 // PHASE 2E: Initialize reconciliation cron job
