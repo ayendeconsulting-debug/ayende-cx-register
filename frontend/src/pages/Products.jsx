@@ -44,6 +44,10 @@ const Products = () => {
     description: ''
   });
   const [categoryErrors, setCategoryErrors] = useState({});
+  
+  // Category management state
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -160,6 +164,41 @@ const Products = () => {
     setShowCategoryForm(false);
     setCategoryFormData({ name: '', description: '' });
     setCategoryErrors({});
+  };
+
+  // Category delete handler
+  const handleDeleteCategory = async (categoryId) => {
+    if (!window.confirm('Are you sure you want to delete this category? This cannot be undone if the category has no products.')) {
+      return;
+    }
+
+    try {
+      setDeletingCategory(categoryId);
+      const response = await categoryService.deleteCategory(categoryId);
+      
+      if (response.success) {
+        toast.success('Category deleted successfully');
+        
+        // Reload categories
+        await loadCategories();
+        
+        // Clear selected category if it was deleted
+        if (selectedCategory === categoryId) {
+          setSelectedCategory('');
+        }
+        
+        // Close category manager
+        setShowCategoryManager(false);
+      }
+    } catch (error) {
+      if (error.response?.status === 400) {
+        toast.error(error.response.data.message || 'Cannot delete category with existing products');
+      } else {
+        toast.error('Failed to delete category');
+      }
+    } finally {
+      setDeletingCategory(null);
+    }
   };
 
   // Filter products
@@ -304,16 +343,25 @@ const Products = () => {
             <h1 className="text-2xl font-bold text-gray-800">Products</h1>
             <p className="text-gray-600">Manage your product catalog and inventory</p>
           </div>
-          <button 
-            onClick={() => {
-              console.log('Opening modal');
-              setShowModal(true);
-            }} 
-            className="btn-primary"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Add Product
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCategoryManager(true)}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center"
+            >
+              <Filter className="w-5 h-5 mr-2" />
+              Manage Categories
+            </button>
+            <button 
+              onClick={() => {
+                console.log('Opening modal');
+                setShowModal(true);
+              }} 
+              className="btn-primary"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add Product
+            </button>
+          </div>
         </div>
 
         {/* Low Stock Alert */}
@@ -804,6 +852,86 @@ const Products = () => {
           }}
           product={selectedProduct}
         />
+      )}
+
+      {/* Category Manager Modal */}
+      {showCategoryManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Manage Categories</h2>
+              <button
+                onClick={() => setShowCategoryManager(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {categories.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Filter className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No categories yet</p>
+                  <p className="text-sm">Create your first category to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {categories.map((category) => {
+                    const productCount = products.filter(p => p.categoryId === category.id).length;
+                    
+                    return (
+                      <div
+                        key={category.id}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-800">{category.name}</h3>
+                          {category.description && (
+                            <p className="text-sm text-gray-600 mt-1">{category.description}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
+                            {productCount} product{productCount !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          disabled={deletingCategory === category.id}
+                          className={`ml-4 p-2 rounded-lg transition-colors ${
+                            deletingCategory === category.id
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'hover:bg-red-50 text-red-600 hover:text-red-700'
+                          }`}
+                          title={productCount > 0 ? 'Cannot delete category with products' : 'Delete category'}
+                        >
+                          {deletingCategory === category.id ? (
+                            <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowCategoryManager(false);
+                  setShowCategoryForm(true);
+                }}
+                className="w-full btn-primary"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Create New Category
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <QuickActions />
