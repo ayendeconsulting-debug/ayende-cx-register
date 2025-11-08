@@ -2,6 +2,8 @@
  * Customer Service
  * Business logic for customer operations
  * MULTI-TENANT VERSION - All operations filtered by businessId
+ * 
+ * UPDATED: Added createFromWebhook() for CRM → POS customer creation
  */
 
 import prisma from '../config/database.js';
@@ -93,6 +95,155 @@ export const createCustomer = async (businessId, customerData) => {
     return customer;
   } catch (error) {
     console.error('[CUSTOMER] Error creating customer:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create customer from CRM webhook (CRM → POS sync)
+ * This function is called when CRM creates a customer and sends webhook to POS
+ * 
+ * Key differences from createCustomer():
+ * - Does NOT check CRM for duplicates (customer is FROM CRM)
+ * - Does NOT queue for CRM sync (already in CRM)
+ * - Sets syncState to 'SYNCED' immediately
+ * - Sets customerSource to 'CRM'
+ * - Stores CRM customer ID in externalId field
+ * 
+ * @param {Object} customerData - Customer data from CRM webhook
+ * @param {string} customerData.businessId - POS business ID
+ * @param {string} customerData.externalId - CRM customer ID
+ * @param {string} customerData.firstName - Customer first name
+ * @param {string} customerData.lastName - Customer last name
+ * @param {string} [customerData.email] - Customer email
+ * @param {string} [customerData.phone] - Customer phone
+ * @param {number} [customerData.loyaltyPoints] - Loyalty points from CRM
+ * @param {string} [customerData.loyaltyTier] - Loyalty tier from CRM
+ * @param {number} [customerData.totalSpent] - Total spent from CRM
+ * @param {number} [customerData.visitCount] - Visit count from CRM
+ * @returns {Promise<Object>} Created customer
+ */
+export const createFromWebhook = async (customerData) => {
+  try {
+    const {
+      businessId,
+      externalId,      // CRM customer ID
+      email,
+      firstName,
+      lastName,
+      phone,
+      address,
+      city,
+      state,
+      postalCode,
+      dateOfBirth,
+      marketingOptIn,
+      loyaltyPoints,
+      loyaltyTier,
+      totalSpent,
+      visitCount
+    } = customerData;
+
+    console.log(`[CUSTOMER] Creating customer from CRM webhook: ${firstName} ${lastName}`);
+    console.log(`[CUSTOMER] CRM ID: ${externalId}, Business: ${businessId}`);
+
+    // Validate required fields
+    if (!businessId) {
+      throw new AppError('Business ID is required', 400);
+    }
+
+    if (!externalId) {
+      throw new AppError('External ID (CRM customer ID) is required', 400);
+    }
+
+    if (!firstName || !lastName) {
+      throw new AppError('First name and last name are required', 400);
+    }
+
+    // Check if business exists
+    const business = await prisma.business.findUnique({
+      where: { id: businessId }
+    });
+
+    if (!business) {
+      throw new AppError('Business not found', 404);
+    }
+
+    // Check for duplicate by phone (POS side only)
+    if (phone) {
+      const existingByPhone = await prisma.customer.findFirst({
+        where: {
+          businessId,
+          phone: phone,
+          isAnonymous: false,
+        },
+      });
+
+      if (existingByPhone) {
+        console.log(`[CUSTOMER] Customer with phone ${phone} already exists: ${existingByPhone.id}`);
+        throw new AppError('Customer with this phone number already exists in POS', 409);
+      }
+    }
+
+    // Check for duplicate by email (POS side only)
+    if (email) {
+      const existingByEmail = await prisma.customer.findFirst({
+        where: {
+          businessId,
+          email: email,
+          isAnonymous: false,
+        },
+      });
+
+      if (existingByEmail) {
+        console.log(`[CUSTOMER] Customer with email ${email} already exists: ${existingByEmail.id}`);
+        throw new AppError('Customer with this email already exists in POS', 409);
+      }
+    }
+
+    // Create customer in POS
+    const customer = await prisma.customer.create({
+      data: {
+        businessId,
+        externalId,              // Store CRM customer ID
+        firstName,
+        lastName,
+        email: email || null,
+        phone: phone || null,
+        dateOfBirth: dateOfBirth || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zipCode: postalCode || null,
+        marketingOptIn: marketingOptIn || false,
+        
+        // Loyalty data from CRM
+        loyaltyPoints: loyaltyPoints || 0,
+        loyaltyTier: loyaltyTier || 'BRONZE',
+        totalSpent: totalSpent || 0,
+        visitCount: visitCount || 0,
+        
+        // Metadata
+        customerSource: 'CRM',        // Mark as coming from CRM
+        syncState: 'SYNCED',          // Already synced (from CRM)
+        lastSyncedAt: new Date(),     // Mark sync timestamp
+        isActive: true,
+        isAnonymous: false,
+        notes: 'Customer created from CRM',
+      },
+    });
+
+    console.log(`[CUSTOMER] Customer created from webhook: ${customer.id}`);
+    console.log(`[CUSTOMER] CRM ID: ${externalId} → POS ID: ${customer.id}`);
+    console.log(`[CUSTOMER] Loyalty: ${customer.loyaltyPoints} pts (${customer.loyaltyTier})`);
+
+    // DO NOT queue for CRM sync - customer is already in CRM
+    // This prevents circular sync
+
+    return customer;
+
+  } catch (error) {
+    console.error('[CUSTOMER] Error creating customer from webhook:', error);
     throw error;
   }
 };
@@ -421,6 +572,7 @@ export const searchCustomers = async (businessId, query) => {
 
 export default {
   createCustomer,
+  createFromWebhook,  // NEW: Export new function
   getAllCustomers,
   getCustomerById,
   updateCustomer,
