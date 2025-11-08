@@ -294,6 +294,11 @@ export const sendInvitationReminderEmail = async ({
 };
 
 export default {
+  sendEmail,
+  sendTransactionReceipt,
+  sendEndOfDayReport,
+  sendLowStockAlert,
+  verifyEmailConfig,
   sendInvitationEmail,
   sendInvitationReminderEmail,
 };
