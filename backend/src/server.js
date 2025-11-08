@@ -255,7 +255,23 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 app.use('/api/admin', adminRoutes);
+
+// List all businesses
+app.get('/api/v1/admin/list-businesses', async (req, res) => {
+  try {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    const businesses = await prisma.business.findMany({
+      select: { id: true, businessName: true, externalTenantId: true }
+    });
+    await prisma.$disconnect();
+    res.json({ success: true, businesses });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // 404 handler
 app.use(notFound);
