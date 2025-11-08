@@ -228,12 +228,20 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
     const business = await prisma.business.findFirst({ where: { externalTenantId: BASH_EVENTS_TENANT_ID } });
     if (!business) return res.status(404).json({ success: false, error: 'Bash Events not found' });
 
+    // Create categories - skip if exists
     const createdCategories = {};
     for (const cat of categories) {
-      const created = await prisma.category.create({
-        data: { businessId: business.id, name: cat.name, description: cat.description, isActive: true }
+      let category = await prisma.category.findFirst({
+        where: { businessId: business.id, name: cat.name }
       });
-      createdCategories[cat.name] = created.id;
+      
+      if (!category) {
+        category = await prisma.category.create({
+          data: { businessId: business.id, name: cat.name, description: cat.description, isActive: true }
+        });
+      }
+      
+      createdCategories[cat.name] = category.id;
     }
 
     let count = 0;
