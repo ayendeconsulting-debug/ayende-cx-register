@@ -171,6 +171,90 @@ app.use('/api/integration/webhook', integrationWebhookRoutes);
 // ============================================
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/reconciliation', reconciliationRoutes);
+// ============================================
+// BASH EVENTS PRODUCT IMPORT - One-time endpoint
+// ============================================
+app.post('/api/v1/admin/import-bash-products', async (req, res) => {
+  try {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    const BASH_EVENTS_TENANT_ID = '1fcc7984-68c2-493c-a364-778c3a82cb66';
+    
+    const categories = [
+      { name: 'Tableware', description: 'Plates, cutlery, glasses, and dining accessories' },
+      { name: 'Furniture', description: 'Chairs, tables, and seating arrangements' },
+      { name: 'Lighting', description: 'Event lighting and ambiance equipment' },
+      { name: 'Decor', description: 'Decorative items and accessories' },
+      { name: 'Linens', description: 'Tablecloths, napkins, and fabric accessories' },
+      { name: 'Serving Equipment', description: 'Chafing dishes, trays, and serving items' },
+      { name: 'Nigerian Cuisine', description: 'Traditional Nigerian dishes and delicacies' },
+      { name: 'English Cuisine', description: 'Classic English and Continental dishes' },
+      { name: 'Beverages', description: 'Drinks and beverage packages' },
+    ];
+
+    const products = [
+      { name: 'White China Dinner Plates (10.5")', category: 'Tableware', price: 500, stock: 500, description: 'Classic white china dinner plates' },
+      { name: 'Gold Rim Charger Plates', category: 'Tableware', price: 800, stock: 200, description: 'Elegant gold-rimmed charger plates' },
+      { name: 'Premium Stainless Steel Cutlery Set', category: 'Tableware', price: 300, stock: 300, description: 'Complete cutlery set' },
+      { name: 'Crystal Wine Glasses', category: 'Tableware', price: 400, stock: 400, description: 'Premium crystal wine glasses' },
+      { name: 'Champagne Flutes', category: 'Tableware', price: 400, stock: 300, description: 'Elegant champagne flutes' },
+      { name: 'Gold Plastic Forks (100-pack)', category: 'Tableware', price: 3500, stock: 50, description: 'Disposable gold forks, 100 pack' },
+      { name: 'White Linen Napkins', category: 'Tableware', price: 200, stock: 600, description: 'Premium white linen napkins' },
+      { name: 'Glass Water Goblets', category: 'Tableware', price: 350, stock: 400, description: 'Classic glass goblets' },
+      { name: 'White Chiavari Chairs', category: 'Furniture', price: 2500, stock: 200, description: 'Classic white chiavari chairs' },
+      { name: 'Gold Chiavari Chairs', category: 'Furniture', price: 2500, stock: 150, description: 'Luxurious gold chiavari chairs' },
+      { name: '6ft Rectangular Tables', category: 'Furniture', price: 5000, stock: 80, description: '6-foot rectangular tables' },
+      { name: '5ft Round Tables (seats 8)', category: 'Furniture', price: 6000, stock: 60, description: 'Round tables seating 8' },
+      { name: 'LED Uplighting (per unit)', category: 'Lighting', price: 8000, stock: 50, description: 'Wireless LED uplighting' },
+      { name: 'Fairy String Lights (100ft)', category: 'Lighting', price: 12000, stock: 40, description: 'Decorative fairy lights' },
+      { name: 'Crystal Chandelier', category: 'Lighting', price: 35000, stock: 10, description: 'Elegant crystal chandelier' },
+      { name: 'Floral Centerpiece (Large)', category: 'Decor', price: 12000, stock: 50, description: 'Large floral centerpiece' },
+      { name: 'White Fabric Backdrop (20ft)', category: 'Decor', price: 25000, stock: 15, description: 'White draping backdrop' },
+      { name: 'White Tablecloth (6ft)', category: 'Linens', price: 2500, stock: 150, description: 'Premium white tablecloth' },
+      { name: 'White Chair Covers', category: 'Linens', price: 800, stock: 300, description: 'Universal spandex covers' },
+      { name: 'Chafing Dish Set', category: 'Serving Equipment', price: 8000, stock: 40, description: 'Complete chafing dish set' },
+      { name: 'Jollof Rice (Party Tray)', category: 'Nigerian Cuisine', price: 45000, stock: 0, description: 'Nigerian jollof rice - serves 20-25' },
+      { name: 'Fried Rice (Party Tray)', category: 'Nigerian Cuisine', price: 45000, stock: 0, description: 'Nigerian fried rice - serves 20-25' },
+      { name: 'Pounded Yam with Egusi', category: 'Nigerian Cuisine', price: 55000, stock: 0, description: 'Pounded yam with egusi - serves 15-20' },
+      { name: 'Pepper Soup (Goat)', category: 'Nigerian Cuisine', price: 65000, stock: 0, description: 'Spicy goat pepper soup - serves 20-25' },
+      { name: 'Suya Platter (Beef)', category: 'Nigerian Cuisine', price: 50000, stock: 0, description: 'Grilled suya beef - serves 20-25' },
+      { name: 'Roast Beef with Yorkshire Pudding', category: 'English Cuisine', price: 80000, stock: 0, description: 'Traditional roast beef - serves 20-25' },
+      { name: 'Fish and Chips (Pack - 25)', category: 'English Cuisine', price: 65000, stock: 0, description: 'Classic fish and chips, 25 servings' },
+      { name: 'Shepherd\'s Pie (Tray)', category: 'English Cuisine', price: 55000, stock: 0, description: 'Traditional shepherd\'s pie - serves 20-25' },
+      { name: 'Chapman (Party Jug - 5L)', category: 'Beverages', price: 15000, stock: 0, description: 'Nigerian cocktail mix - serves 20-25' },
+      { name: 'Zobo (Party Jug - 5L)', category: 'Beverages', price: 12000, stock: 0, description: 'Hibiscus drink - serves 20-25' },
+    ];
+
+    const business = await prisma.business.findFirst({ where: { externalTenantId: BASH_EVENTS_TENANT_ID } });
+    if (!business) return res.status(404).json({ success: false, error: 'Bash Events not found' });
+
+    const createdCategories = {};
+    for (const cat of categories) {
+      const created = await prisma.category.create({
+        data: { businessId: business.id, name: cat.name, description: cat.description, isActive: true }
+      });
+      createdCategories[cat.name] = created.id;
+    }
+
+    let count = 0;
+    for (const prod of products) {
+      await prisma.product.create({
+        data: {
+          businessId: business.id, categoryId: createdCategories[prod.category],
+          name: prod.name, description: prod.description, price: prod.price,
+          cost: prod.price * 0.6, stockQuantity: prod.stock, unit: 'piece',
+          sku: `BASH-${Date.now()}-${count++}`, isActive: true, trackInventory: prod.stock > 0,
+        }
+      });
+    }
+
+    await prisma.$disconnect();
+    res.json({ success: true, message: 'Import complete!', summary: { business: business.businessName, categories: Object.keys(createdCategories).length, products: count } });
+  } catch (error) {
+    console.error('[IMPORT]', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 app.use('/api/admin', adminRoutes);
 
 // 404 handler
