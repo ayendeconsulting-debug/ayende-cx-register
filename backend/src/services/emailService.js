@@ -6,6 +6,7 @@
  */
 
 import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 import handlebars from 'handlebars';
 import fs from 'fs/promises';
 import path from 'path';
