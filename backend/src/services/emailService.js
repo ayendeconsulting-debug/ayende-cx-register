@@ -293,6 +293,18 @@ export const sendInvitationReminderEmail = async ({
   }
 };
 
+e// Named exports for backwards compatibility
+export {
+  sendEmail,
+  sendTransactionReceipt,
+  sendEndOfDayReport,
+  sendLowStockAlert,
+  verifyEmailConfig,
+  sendInvitationEmail,
+  sendInvitationReminderEmail,
+};
+
+// Default export
 export default {
   sendEmail,
   sendTransactionReceipt,
