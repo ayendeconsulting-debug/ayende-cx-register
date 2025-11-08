@@ -416,20 +416,13 @@ export const updateCustomer = async (businessId, id, updateData) => {
     },
   });
 
-  // Queue for CRM sync
-  await prisma.syncQueue.create({
-    data: {
-      businessId,
-      entityType: 'customer',
-      entityId: id,
-      operation: 'UPDATE',
-      priority: 'NORMAL', // UPDATE operations can remain NORMAL priority
-      status: 'PENDING',
-      payload: {
-        customerId: id,
-        updatedFields: Object.keys(updateData),
-      },
-    },
+  // Queue for CRM sync with HIGH priority
+  await syncQueueService.addToQueue({
+    businessId,
+    entityType: 'customer',
+    entityId: id,
+    operation: 'UPDATE',
+    priority: 'HIGH', // HIGH priority ensures customer updates sync before transactions
   });
 
   console.log(`[CUSTOMER] Customer updated: ${id}`);
@@ -465,19 +458,13 @@ export const deleteCustomer = async (businessId, id) => {
     },
   });
 
-  // Queue for CRM sync
-  await prisma.syncQueue.create({
-    data: {
-      businessId,
-      entityType: 'customer',
-      entityId: id,
-      operation: 'DELETE',
-      priority: 'NORMAL', // DELETE operations can remain NORMAL priority
-      status: 'PENDING',
-      payload: {
-        customerId: id,
-      },
-    },
+  // Queue for CRM sync with HIGH priority
+  await syncQueueService.addToQueue({
+    businessId,
+    entityType: 'customer',
+    entityId: id,
+    operation: 'DELETE',
+    priority: 'HIGH', // HIGH priority ensures customer deletes sync before transactions
   });
 
   console.log(`[CUSTOMER] Customer deactivated: ${id}`);
