@@ -31,6 +31,7 @@ import { initializeReconciliationJob } from './cron/reconciliationJob.js';
 import reconciliationRoutes from './routes/reconciliationRoutes.js';
 import adminRoutes from './routes/admin.js';
 import { initializeEmailJobs } from './cron/emailJobs.js';
+import { initCrmSyncScheduler } from './jobs/crmSyncScheduler.js';
 
 
 // Load environment variables
@@ -354,6 +355,11 @@ app.listen(PORT, () => {
     }
     } else {
       console.log('  ⚠  Email jobs disabled\n');
+
+  if (process.env.ENABLE_CRM_SYNC === 'true') {
+      initCrmSyncScheduler();
+      console.log('  ✓ CRM sync scheduler initialized successfully');
+}
     }
 });
 
