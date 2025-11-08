@@ -246,15 +246,29 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
 
     let count = 0;
     for (const prod of products) {
-      await prisma.product.create({
-        data: {
-          businessId: business.id, categoryId: createdCategories[prod.category],
-          name: prod.name, description: prod.description, price: prod.price,
-          costPrice: prod.price * 0.6, stockQuantity: prod.stock, unit: 'piece',
-          sku: `BASH-${Date.now()}-${count++}`, isActive: true, trackInventory: prod.stock > 0,
-        }
-      });
-    }
+    await prisma.product.create({
+      data: {
+        businessId: business.id,
+        categoryId: createdCategories[prod.category],
+        name: prod.name,
+        description: prod.description,
+        price: prod.price,
+        costPrice: prod.price * 0.6,  // ✓ Correct field
+        stockQuantity: prod.stock,
+        lowStockAlert: 10,  // Default low stock alert
+        unit: 'piece',
+        sku: `BASH-${Date.now()}-${count}`,
+        barcode: null,  // ✓ Allowed
+        imageUrl: null,  // ✓ Allowed
+        isActive: true,
+        isTaxable: true,  // Default true
+        loyaltyPoints: 0,  // Default 0
+        currency: '₦',  // Nigerian Naira
+        currencyCode: 'NGN',  // Nigerian Naira code
+      }
+    });
+    count++;
+  }
 
     await prisma.$disconnect();
     res.json({ success: true, message: 'Import complete!', summary: { business: business.businessName, categories: Object.keys(createdCategories).length, products: count } });
