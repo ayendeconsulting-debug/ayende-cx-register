@@ -178,7 +178,7 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
   try {
     const { PrismaClient } = await import('@prisma/client');
     const prisma = new PrismaClient();
-    const BASH_EVENTS_TENANT_ID = '1fcc7984-68c2-493c-a364-778c3a82cb66';
+    const BASH_EVENTS_TENANT_ID = 'a-cx-m3b9o';
     
     const categories = [
       { name: 'Tableware', description: 'Plates, cutlery, glasses, and dining accessories' },
