@@ -242,7 +242,7 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
         data: {
           businessId: business.id, categoryId: createdCategories[prod.category],
           name: prod.name, description: prod.description, price: prod.price,
-          cost: prod.price * 0.6, stockQuantity: prod.stock, unit: 'piece',
+          costPrice: prod.price * 0.6, stockQuantity: prod.stock, unit: 'piece',
           sku: `BASH-${Date.now()}-${count++}`, isActive: true, trackInventory: prod.stock > 0,
         }
       });
