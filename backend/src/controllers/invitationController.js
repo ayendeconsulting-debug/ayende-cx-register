@@ -4,6 +4,7 @@ import { hashPassword, generateAccessToken } from '../utils/auth.js';
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import crypto from 'crypto';
+import { sendInvitationEmail, sendInvitationReminderEmail } from '../services/emailService.js';
 
 /**
  * User Invitation Controller
@@ -99,7 +100,7 @@ export const inviteUser = asyncHandler(async (req, res) => {
       invitedBy: inviterId,
       message: message || null,
       status: 'PENDING',
-      updatedAt: new Date(), // FIXED: Added updatedAt field
+      updatedAt: new Date(),
     },
     include: {
       business: {
@@ -116,9 +117,25 @@ export const inviteUser = asyncHandler(async (req, res) => {
     },
   });
 
-  // TODO: Send invitation email
-  // For now, we'll return the invitation link
+  // Generate invitation link
   const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/accept-invitation/${invitationToken}`;
+
+  // FIXED: Send invitation email
+  const emailResult = await sendInvitationEmail({
+    email,
+    firstName,
+    lastName,
+    businessName: business.businessName,
+    inviterName: `${inviter.firstName} ${inviter.lastName}`,
+    invitationLink,
+    role,
+    message,
+    expiresAt,
+  });
+
+  if (!emailResult.success) {
+    console.error('[INVITATION] Failed to send email, but invitation was created');
+  }
 
   return createdResponse(
     res,
@@ -131,10 +148,13 @@ export const inviteUser = asyncHandler(async (req, res) => {
         role: invitation.role,
         status: invitation.status,
         expiresAt: invitation.expiresAt,
-        invitationLink, // In production, this would be sent via email
+        invitationLink, // Still return link for testing/backup
+        emailSent: emailResult.success,
       },
     },
-    'Invitation sent successfully'
+    emailResult.success 
+      ? 'Invitation sent successfully via email' 
+      : 'Invitation created but email failed to send'
   );
 });
 
