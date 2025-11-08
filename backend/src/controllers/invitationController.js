@@ -99,6 +99,7 @@ export const inviteUser = asyncHandler(async (req, res) => {
       invitedBy: inviterId,
       message: message || null,
       status: 'PENDING',
+      updatedAt: new Date(), // FIXED: Added updatedAt field
     },
     include: {
       business: {
@@ -169,7 +170,10 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
   if (new Date() > new Date(invitation.expiresAt)) {
     await prisma.userInvitation.update({
       where: { id: invitation.id },
-      data: { status: 'EXPIRED' },
+      data: { 
+        status: 'EXPIRED',
+        updatedAt: new Date() // FIXED: Added updatedAt
+      },
     });
     throw new AppError('This invitation has expired', 400);
   }
@@ -229,6 +233,7 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
       data: {
         status: 'ACCEPTED',
         acceptedAt: new Date(),
+        updatedAt: new Date(), // FIXED: Added updatedAt
       },
     });
 
@@ -299,7 +304,10 @@ export const getInvitationDetails = asyncHandler(async (req, res) => {
   if (new Date() > new Date(invitation.expiresAt)) {
     await prisma.userInvitation.update({
       where: { id: invitation.id },
-      data: { status: 'EXPIRED' },
+      data: { 
+        status: 'EXPIRED',
+        updatedAt: new Date() // FIXED: Added updatedAt
+      },
     });
     throw new AppError('This invitation has expired', 400);
   }
@@ -383,7 +391,10 @@ export const revokeInvitation = asyncHandler(async (req, res) => {
 
   await prisma.userInvitation.update({
     where: { id },
-    data: { status: 'REVOKED' },
+    data: { 
+      status: 'REVOKED',
+      updatedAt: new Date() // FIXED: Added updatedAt
+    },
   });
 
   return successResponse(res, null, 'Invitation revoked successfully');
@@ -418,7 +429,10 @@ export const resendInvitation = asyncHandler(async (req, res) => {
 
   await prisma.userInvitation.update({
     where: { id },
-    data: { expiresAt: newExpiresAt },
+    data: { 
+      expiresAt: newExpiresAt,
+      updatedAt: new Date() // FIXED: Added updatedAt
+    },
   });
 
   // TODO: Resend invitation email
