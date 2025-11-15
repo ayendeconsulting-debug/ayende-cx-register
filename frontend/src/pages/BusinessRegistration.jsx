@@ -1,84 +1,104 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   Building2, 
   User, 
   Mail, 
   Lock, 
-  Phone, 
-  MapPin,
+  Palette,
   CheckCircle,
   AlertCircle,
-  Loader
+  Loader,
+  ArrowLeft,
+  ArrowRight,
+  Globe
 } from 'lucide-react';
 import axios from 'axios';
 
-// Production POS Backend API (has correct CORS configuration)
-const API_BASE_URL = 'https://pos-staging.ayendecx.com/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 const BusinessRegistration = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1); // 1: Business Info, 2: Owner Info, 3: Settings
+  const [step, setStep] = useState(1); // 1: Business Info, 2: Owner Info, 3: Theme
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [checkingSubdomain, setCheckingSubdomain] = useState(false);
+  const [subdomainAvailable, setSubdomainAvailable] = useState(null);
 
   const [formData, setFormData] = useState({
     // Business Information
     businessName: '',
+    subdomain: '',
     businessEmail: '',
     businessPhone: '',
-    businessAddress: '',
-    businessCity: '',
-    businessState: '',
-    businessZipCode: '',
-    businessCountry: 'US',
     
     // Owner Information
     ownerFirstName: '',
     ownerLastName: '',
     ownerEmail: '',
-    ownerUsername: '',
     ownerPassword: '',
     confirmPassword: '',
     
-    // Settings
-    currency: '$',
-    currencyCode: 'USD',
-    timezone: 'America/New_York',
-    taxRate: 0,
-    taxEnabled: false,
-  });
-
-  const [availability, setAvailability] = useState({
-    username: null,
-    email: null,
-    businessEmail: null,
+    // Theme Settings
+    primaryColor: '#667eea',
+    secondaryColor: '#764ba2'
   });
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: value
     }));
     setError('');
+    
+    // Clear subdomain availability when subdomain changes
+    if (name === 'subdomain') {
+      setSubdomainAvailable(null);
+    }
   };
 
-  const checkAvailability = async (field, value) => {
-    if (!value) return;
+  // Auto-generate subdomain from business name
+  useEffect(() => {
+  if (formData.businessName && !formData.subdomain) {
+    const suggested = formData.businessName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .substring(0, 20);
     
-    try {
-      const response = await axios.post(`${API_BASE_URL}/registration/check-availability`, {
-        [field]: value
-      });
-      
-      setAvailability(prev => ({
-        ...prev,
-        [field]: response.data.data[field]
+    setFormData(prev => ({
+      ...prev,
+      subdomain: suggested
       }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.businessName]); // Only trigger on business name change
+
+  // Check subdomain availability
+  const checkSubdomain = async () => {
+    if (!formData.subdomain) return;
+    
+    // Validate format
+    const subdomainRegex = /^[a-z0-9-]+$/;
+    if (!subdomainRegex.test(formData.subdomain)) {
+      setSubdomainAvailable({ available: false, message: 'Only lowercase letters, numbers, and hyphens allowed' });
+      return;
+    }
+
+    setCheckingSubdomain(true);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/businesses/check-subdomain/${formData.subdomain}`);
+      setSubdomainAvailable({
+        available: response.data.data.available,
+        message: response.data.message
+      });
     } catch (error) {
-      console.error('Error checking availability:', error);
+      console.error('Error checking subdomain:', error);
+      setSubdomainAvailable({ available: false, message: 'Error checking availability' });
+    } finally {
+      setCheckingSubdomain(false);
     }
   };
 
@@ -87,12 +107,12 @@ const BusinessRegistration = () => {
       setError('Business name is required');
       return false;
     }
-    if (!formData.businessEmail) {
-      setError('Business email is required');
+    if (!formData.subdomain) {
+      setError('Subdomain is required');
       return false;
     }
-    if (availability.businessEmail && !availability.businessEmail.available) {
-      setError('Business email is already registered');
+    if (!subdomainAvailable || !subdomainAvailable.available) {
+      setError('Please choose an available subdomain');
       return false;
     }
     return true;
@@ -107,16 +127,9 @@ const BusinessRegistration = () => {
       setError('Owner email is required');
       return false;
     }
-    if (availability.email && !availability.email.available) {
-      setError('Email is already registered');
-      return false;
-    }
-    if (!formData.ownerUsername) {
-      setError('Username is required');
-      return false;
-    }
-    if (availability.username && !availability.username.available) {
-      setError('Username is already taken');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.ownerEmail)) {
+      setError('Please enter a valid email address');
       return false;
     }
     if (!formData.ownerPassword || formData.ownerPassword.length < 8) {
@@ -150,57 +163,69 @@ const BusinessRegistration = () => {
     setLoading(true);
 
     try {
-      await axios.post(`${API_BASE_URL}/registration/business`, formData);
-      
+      await axios.post(`${API_BASE_URL}/businesses/register`, {
+        businessName: formData.businessName,
+        subdomain: formData.subdomain,
+        businessEmail: formData.businessEmail,
+        businessPhone: formData.businessPhone,
+        ownerFirstName: formData.ownerFirstName,
+        ownerLastName: formData.ownerLastName,
+        ownerEmail: formData.ownerEmail,
+        ownerPassword: formData.ownerPassword,
+        primaryColor: formData.primaryColor,
+        secondaryColor: formData.secondaryColor
+      });
+
       setSuccess(true);
       
       // Redirect to login after 3 seconds
       setTimeout(() => {
-        navigate('/login', { 
-          state: { 
+        navigate('/login', {
+          state: {
             message: 'Registration successful! Please login with your credentials.',
-            username: formData.ownerUsername
+            username: `admin.${formData.subdomain}`
           }
         });
       }, 3000);
-      
+
     } catch (error) {
+      console.error('Registration error:', error);
       setError(error.response?.data?.message || 'Registration failed. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-          <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-6" />
-          <h2 className="text-3xl font-bold text-gray-800 mb-4">
-            Registration Successful!
-          </h2>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-10 h-10 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Registration Successful!</h2>
           <p className="text-gray-600 mb-6">
-            Your business account has been created successfully.
+            Your business has been registered successfully. Redirecting to login...
           </p>
-          <p className="text-sm text-gray-500">
-            Redirecting to login page...
-          </p>
+          <div className="flex items-center justify-center">
+            <Loader className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-6">
-      <div className="max-w-4xl w-full">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Start Your Business Journey
-          </h1>
-          <p className="text-gray-600">
-            Create your Ayende-CX account in just a few steps
-          </p>
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <Building2 className="w-8 h-8 text-white" />
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Register Your Business</h1>
+          <p className="text-gray-600">Join Ayende POS and start managing your business today</p>
         </div>
 
         {/* Progress Steps */}
@@ -249,106 +274,94 @@ const BusinessRegistration = () => {
                     value={formData.businessName}
                     onChange={handleChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., BASH EVENTS"
+                    placeholder="Enter your business name"
                     required
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Business Email *
+                    Subdomain * <span className="text-gray-500 text-xs">(Your unique URL)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Globe className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        name="subdomain"
+                        value={formData.subdomain}
+                        onChange={handleChange}
+                        onBlur={checkSubdomain}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="yourbusiness"
+                        pattern="[a-z0-9-]+"
+                        required
+                      />
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                        {checkingSubdomain && <Loader className="w-5 h-5 animate-spin text-blue-600" />}
+                        {!checkingSubdomain && subdomainAvailable?.available && (
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                        )}
+                        {!checkingSubdomain && subdomainAvailable && !subdomainAvailable.available && (
+                          <AlertCircle className="w-5 h-5 text-red-600" />
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-gray-500">.ayendecx.com</span>
+                  </div>
+                  {subdomainAvailable && (
+                    <p className={`mt-2 text-sm ${subdomainAvailable.available ? 'text-green-600' : 'text-red-600'}`}>
+                      {subdomainAvailable.message}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Only lowercase letters, numbers, and hyphens allowed
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Business Email
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="w-5 h-5 text-gray-400" />
+                    </div>
                     <input
                       type="email"
                       name="businessEmail"
                       value={formData.businessEmail}
                       onChange={handleChange}
-                      onBlur={(e) => checkAvailability('businessEmail', e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="contact@yourcompany.com"
-                      required
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="business@example.com"
                     />
                   </div>
-                  {availability.businessEmail && (
-                    <p className={`text-sm mt-1 ${availability.businessEmail.available ? 'text-green-600' : 'text-red-600'}`}>
-                      {availability.businessEmail.message}
-                    </p>
-                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Business Phone
                   </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="tel"
-                      name="businessPhone"
-                      value={formData.businessPhone}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="555-123-4567"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="businessAddress"
-                      value={formData.businessAddress}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="123 Main Street"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      name="businessCity"
-                      value={formData.businessCity}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="City"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      State
-                    </label>
-                    <input
-                      type="text"
-                      name="businessState"
-                      value={formData.businessState}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="State"
-                    />
-                  </div>
+                  <input
+                    type="tel"
+                    name="businessPhone"
+                    value={formData.businessPhone}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="+1 (555) 000-0000"
+                  />
                 </div>
 
                 <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                   >
-                    Next Step
+                    Next
+                    <ArrowRight className="w-5 h-5" />
                   </button>
                 </div>
               </div>
@@ -359,7 +372,7 @@ const BusinessRegistration = () => {
               <div className="space-y-6">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                   <User className="w-6 h-6 text-blue-600" />
-                  Owner Account
+                  Owner Information
                 </h2>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -376,7 +389,6 @@ const BusinessRegistration = () => {
                       required
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Last Name *
@@ -394,48 +406,22 @@ const BusinessRegistration = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
+                    Email Address *
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="w-5 h-5 text-gray-400" />
+                    </div>
                     <input
                       type="email"
                       name="ownerEmail"
                       value={formData.ownerEmail}
                       onChange={handleChange}
-                      onBlur={(e) => checkAvailability('email', e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="you@example.com"
                       required
                     />
                   </div>
-                  {availability.email && (
-                    <p className={`text-sm mt-1 ${availability.email.available ? 'text-green-600' : 'text-red-600'}`}>
-                      {availability.email.message}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Username *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="ownerUsername"
-                      value={formData.ownerUsername}
-                      onChange={handleChange}
-                      onBlur={(e) => checkAvailability('username', e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  {availability.username && (
-                    <p className={`text-sm mt-1 ${availability.username.available ? 'text-green-600' : 'text-red-600'}`}>
-                      {availability.username.message}
-                    </p>
-                  )}
                 </div>
 
                 <div>
@@ -443,14 +429,17 @@ const BusinessRegistration = () => {
                     Password *
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock className="w-5 h-5 text-gray-400" />
+                    </div>
                     <input
                       type="password"
                       name="ownerPassword"
                       value={formData.ownerPassword}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Minimum 8 characters"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Min. 8 characters"
+                      minLength="8"
                       required
                     />
                   </div>
@@ -461,161 +450,148 @@ const BusinessRegistration = () => {
                     Confirm Password *
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock className="w-5 h-5 text-gray-400" />
+                    </div>
                     <input
                       type="password"
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Re-enter password"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between">
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                    className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
                   >
+                    <ArrowLeft className="w-5 h-5" />
                     Back
                   </button>
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                   >
-                    Next Step
+                    Next
+                    <ArrowRight className="w-5 h-5" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 3: Settings */}
+            {/* Step 3: Theme Settings */}
             {step === 3 && (
               <div className="space-y-6">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                  Business Settings
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                  <Palette className="w-6 h-6 text-blue-600" />
+                  Customize Your Theme
                 </h2>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Currency Symbol
-                    </label>
-                    <input
-                      type="text"
-                      name="currency"
-                      value={formData.currency}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Currency Code
-                    </label>
-                    <select
-                      name="currencyCode"
-                      value={formData.currencyCode}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="GBP">GBP</option>
-                      <option value="CAD">CAD</option>
-                      <option value="NGN">NGN</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Timezone
-                  </label>
-                  <select
-                    name="timezone"
-                    value={formData.timezone}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Preview</h3>
+                  <div 
+                    className="h-32 rounded-lg shadow-lg flex items-center justify-center text-white text-xl font-bold"
+                    style={{
+                      background: `linear-gradient(135deg, ${formData.primaryColor} 0%, ${formData.secondaryColor} 100%)`
+                    }}
                   >
-                    <option value="America/New_York">Eastern Time (ET)</option>
-                    <option value="America/Chicago">Central Time (CT)</option>
-                    <option value="America/Denver">Mountain Time (MT)</option>
-                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                    <option value="Europe/London">London (GMT)</option>
-                    <option value="Africa/Lagos">Lagos (WAT)</option>
-                  </select>
+                    {formData.businessName || 'Your Business'}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    name="taxEnabled"
-                    id="taxEnabled"
-                    checked={formData.taxEnabled}
-                    onChange={handleChange}
-                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <label htmlFor="taxEnabled" className="text-sm font-medium text-gray-700">
-                    Enable Tax
-                  </label>
-                </div>
-
-                {formData.taxEnabled && (
+                <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tax Rate (%)
+                      Primary Color
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="taxRate"
-                      value={formData.taxRate}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., 8.5"
-                    />
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        name="primaryColor"
+                        value={formData.primaryColor}
+                        onChange={handleChange}
+                        className="w-16 h-12 border-2 border-gray-300 rounded cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={formData.primaryColor}
+                        onChange={(e) => setFormData(prev => ({ ...prev, primaryColor: e.target.value }))}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        placeholder="#667eea"
+                      />
+                    </div>
                   </div>
-                )}
 
-                <div className="flex justify-between pt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Secondary Color
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        name="secondaryColor"
+                        value={formData.secondaryColor}
+                        onChange={handleChange}
+                        className="w-16 h-12 border-2 border-gray-300 rounded cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={formData.secondaryColor}
+                        onChange={(e) => setFormData(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        placeholder="#764ba2"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                    className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
                   >
+                    <ArrowLeft className="w-5 h-5" />
                     Back
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {loading ? (
                       <>
                         <Loader className="w-5 h-5 animate-spin" />
-                        Creating Account...
+                        Registering...
                       </>
                     ) : (
-                      'Complete Registration'
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        Complete Registration
+                      </>
                     )}
                   </button>
                 </div>
               </div>
             )}
           </form>
+        </div>
 
-          {/* Login Link */}
-          <div className="mt-6 text-center text-sm text-gray-600">
+        {/* Footer */}
+        <div className="text-center mt-6">
+          <p className="text-gray-600">
             Already have an account?{' '}
             <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
-              Login here
+              Sign In
             </Link>
-          </div>
+          </p>
         </div>
       </div>
     </div>
