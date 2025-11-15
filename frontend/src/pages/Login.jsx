@@ -114,30 +114,33 @@ const Login = () => {
           </button>
         </form>
 
-        {/* Registration Link */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-              Register your business
-            </Link>
-          </p>
-        </div>
+        {/* Registration Footer */}
+<div className="mt-6 pt-6 border-t border-gray-200">
+  <div className="text-center space-y-3">
+    <p className="text-sm text-gray-600">
+      New to Ayende POS?
+    </p>
+    <Link 
+      to="/register" 
+      className="block w-full px-6 py-3 border-2 border-indigo-600 text-indigo-600 rounded-lg font-medium hover:bg-indigo-50 transition-all"
+    >
+      Register Your Business
+    </Link>
+    
+    <div className="text-center pt-2">
+      <p className="text-xs text-gray-500">
+        Need help?{' '}
+        <a 
+          href="mailto:support@ayendecx.com" 
+          className="text-indigo-600 hover:text-indigo-500 font-medium"
+        >
+          Contact Support
+        </a>
+      </p>
+    </div>
+  </div>
+</div>
 
-        {/* Demo Credentials */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-500 text-center mb-3">Demo Credentials:</p>
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="font-semibold text-gray-700">Admin</p>
-              <p className="text-gray-600">admin / admin123</p>
-            </div>
-            <div className="bg-gray-50 p-3 rounded">
-              <p className="font-semibold text-gray-700">Cashier</p>
-              <p className="text-gray-600">cashier / cashier123</p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
