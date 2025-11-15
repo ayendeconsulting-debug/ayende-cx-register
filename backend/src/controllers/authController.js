@@ -97,7 +97,7 @@ export const register = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
   
-  console.log('[LOGIN ATTEMPT]', { username, hasPassword: !!password }); // ADD THIS
+  console.log('[LOGIN ATTEMPT]', { username, hasPassword: !!password });
 
   // Find user - use findFirst for multi-tenant
   const user = await prisma.user.findFirst({
@@ -110,29 +110,35 @@ export const login = asyncHandler(async (req, res) => {
     }
   });
 
-  console.log('[USER FOUND]', user ? `Yes: ${user.username} (${user.business.businessName})` : 'No'); // ADD THIS
+  console.log('[USER FOUND]', user ? `Yes: ${user.username} (${user.business.businessName})` : 'No');
 
   if (!user) {
-    console.log('[LOGIN FAILED] User not found'); // ADD THIS
+    console.log('[LOGIN FAILED] User not found');
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
   // Check business is active
   if (!user.business.isActive) {
-    console.log('[LOGIN FAILED] Business inactive'); // ADD THIS
+    console.log('[LOGIN FAILED] Business inactive');
     return errorResponse(res, 'Business account is inactive. Please contact support.', 401);
   }
 
-  // Verify password
+  // Verify password - DEBUG VERSION
+  console.log('[PASSWORD DEBUG]', {
+    providedPassword: password,
+    storedHash: user.passwordHash.substring(0, 20) + '...',
+    hashLength: user.passwordHash.length
+  });
+  
   const isPasswordValid = await comparePassword(password, user.passwordHash);
-  console.log('[PASSWORD CHECK]', isPasswordValid); // ADD THIS
+  console.log('[PASSWORD CHECK]', isPasswordValid);
 
   if (!isPasswordValid) {
-    console.log('[LOGIN FAILED] Invalid password'); // ADD THIS
+    console.log('[LOGIN FAILED] Invalid password');
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
-console.log('[LOGIN SUCCESS]', user.username); // ADD THIS
+  console.log('[LOGIN SUCCESS]', user.username);
 
   // Update last login
   await prisma.user.update({
@@ -275,7 +281,7 @@ export const logout = asyncHandler(async (req, res) => {
       userId: req.user.id,
       action: 'LOGOUT',
       entityType: 'User',
-      entityId: req.user.id,
+      entityId: user.id,
     },
   });
 
