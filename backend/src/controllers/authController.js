@@ -91,54 +91,60 @@ export const register = asyncHandler(async (req, res) => {
 
 /**
  * @route   POST /api/v1/auth/login
- * @desc    Login user
+ * @desc    Login user (supports both formats: "username" and "username.subdomain")
  * @access  Public
  */
 export const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
-  
-  console.log('[LOGIN ATTEMPT]', { username, hasPassword: !!password });
 
-  // Find user - use findFirst for multi-tenant
+  // Parse username.subdomain format for multi-tenant login
+  let actualUsername = username;
+  let subdomain = null;
+  let business = null;
+
+  // Check if username contains subdomain (e.g., admin.bashevents)
+  if (username.includes('.')) {
+    const parts = username.split('.');
+    actualUsername = parts[0];
+    subdomain = parts[1];
+
+    // Find business by subdomain
+    business = await prisma.business.findUnique({
+      where: { subdomain: subdomain }
+    });
+
+    if (!business) {
+      return errorResponse(res, 'Invalid business subdomain', 401);
+    }
+  }
+
+  // Find user - supports both simple username and multi-tenant format
   const user = await prisma.user.findFirst({
     where: {
-      username,
-      isActive: true
+      username: actualUsername,
+      isActive: true,
+      ...(business && { businessId: business.id }) // Only filter by businessId if subdomain provided
     },
     include: {
       business: true
     }
   });
 
-  console.log('[USER FOUND]', user ? `Yes: ${user.username} (${user.business.businessName})` : 'No');
-
   if (!user) {
-    console.log('[LOGIN FAILED] User not found');
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
   // Check business is active
   if (!user.business.isActive) {
-    console.log('[LOGIN FAILED] Business inactive');
     return errorResponse(res, 'Business account is inactive. Please contact support.', 401);
   }
 
-  // Verify password - DEBUG VERSION
-  console.log('[PASSWORD DEBUG]', {
-    providedPassword: password,
-    storedHash: user.passwordHash.substring(0, 20) + '...',
-    hashLength: user.passwordHash.length
-  });
-  
+  // Verify password
   const isPasswordValid = await comparePassword(password, user.passwordHash);
-  console.log('[PASSWORD CHECK]', isPasswordValid);
 
   if (!isPasswordValid) {
-    console.log('[LOGIN FAILED] Invalid password');
     return errorResponse(res, 'Invalid credentials', 401);
   }
-
-  console.log('[LOGIN SUCCESS]', user.username);
 
   // Update last login
   await prisma.user.update({
@@ -149,7 +155,7 @@ export const login = asyncHandler(async (req, res) => {
   // Generate tokens with businessId
   const payload = {
     ...generateUserPayload(user),
-    businessId: user.businessId // Add businessId to JWT payload
+    businessId: user.businessId
   };
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
@@ -281,7 +287,7 @@ export const logout = asyncHandler(async (req, res) => {
       userId: req.user.id,
       action: 'LOGOUT',
       entityType: 'User',
-      entityId: user.id,
+      entityId: req.user.id,
     },
   });
 
