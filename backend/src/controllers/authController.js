@@ -108,17 +108,28 @@ export const login = asyncHandler(async (req, res) => {
     actualUsername = parts[0];
     subdomain = parts[1];
 
+    console.log('[SUBDOMAIN LOGIN]', { actualUsername, subdomain });
+
     // Find business by subdomain
     business = await prisma.business.findUnique({
       where: { subdomain: subdomain }
     });
 
+    console.log('[BUSINESS LOOKUP]', business ? `Found: ${business.businessName} (ID: ${business.id})` : 'NOT FOUND');
+
     if (!business) {
+      console.log('[LOGIN FAILED] Invalid subdomain:', subdomain);
       return errorResponse(res, 'Invalid business subdomain', 401);
     }
   }
 
   // Find user - supports both simple username and multi-tenant format
+  console.log('[USER LOOKUP]', { 
+    actualUsername, 
+    businessId: business?.id || 'ANY',
+    businessName: business?.businessName || 'ANY'
+  });
+
   const user = await prisma.user.findFirst({
     where: {
       username: actualUsername,
@@ -130,7 +141,10 @@ export const login = asyncHandler(async (req, res) => {
     }
   });
 
+  console.log('[USER FOUND]', user ? `Yes: ${user.username} in ${user.business.businessName}` : 'No');
+
   if (!user) {
+    console.log('[LOGIN FAILED] User not found');
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
@@ -141,10 +155,14 @@ export const login = asyncHandler(async (req, res) => {
 
   // Verify password
   const isPasswordValid = await comparePassword(password, user.passwordHash);
+  console.log('[PASSWORD CHECK]', isPasswordValid ? 'Valid ✅' : 'Invalid ❌');
 
   if (!isPasswordValid) {
+    console.log('[LOGIN FAILED] Invalid password');
     return errorResponse(res, 'Invalid credentials', 401);
   }
+
+  console.log('[LOGIN SUCCESS]', `${user.username} logged into ${user.business.businessName}`);
 
   // Update last login
   await prisma.user.update({
