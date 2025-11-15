@@ -150,7 +150,15 @@ export const syncTransactionToCRM = async (transactionId) => {
       notes: transaction.notes || '',
       timestamp: transaction.createdAt.toISOString(),
     };
-
+    console.log('[CRM SYNC DEBUG] Transaction payload:', JSON.stringify({
+      transactionId: payload.transactionId,
+      transactionNumber: payload.transactionNumber,
+      tenantCustomerId: payload.tenantCustomerId,
+      customerId: transaction.customerId,
+      hasCustomer: !!transaction.customer,
+      customerEmail: transaction.customer?.email
+    }, null, 2));
+    
     // Send to CRM
     const url = `${CRM_BASE_URL}/api/v1/sync/transaction`;
     
