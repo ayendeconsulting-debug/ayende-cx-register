@@ -61,24 +61,25 @@ const BusinessRegistration = () => {
 
   // Auto-generate subdomain from business name
   useEffect(() => {
-  if (formData.businessName && !formData.subdomain) {
-    const suggested = formData.businessName
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .substring(0, 20);
-    
-    setFormData(prev => ({
-      ...prev,
-      subdomain: suggested
+    if (formData.businessName && !formData.subdomain) {
+      const suggested = formData.businessName
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .substring(0, 20);
+      
+      setFormData(prev => ({
+        ...prev,
+        subdomain: suggested
       }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.businessName]); // Only trigger on business name change
+  }, [formData.businessName]);
 
   // Check subdomain availability
   const checkSubdomain = async () => {
     if (!formData.subdomain) return;
+    
+    console.log('[API URL]', API_BASE_URL); // Debug: show what URL we're using
     
     // Validate format
     const subdomainRegex = /^[a-z0-9-]+$/;
@@ -89,7 +90,9 @@ const BusinessRegistration = () => {
 
     setCheckingSubdomain(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/businesses/check-subdomain/${formData.subdomain}`);
+      const url = `${API_BASE_URL}/businesses/check-subdomain/${formData.subdomain}`;
+      console.log('[CHECK SUBDOMAIN]', url); // Debug: show full URL
+      const response = await axios.get(url);
       setSubdomainAvailable({
         available: response.data.data.available,
         message: response.data.message
@@ -296,7 +299,7 @@ const BusinessRegistration = () => {
                         onBlur={checkSubdomain}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="yourbusiness"
-                        pattern="[a-z0-9-]+"
+                        pattern="[a-z0-9\-]+"
                         required
                       />
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
