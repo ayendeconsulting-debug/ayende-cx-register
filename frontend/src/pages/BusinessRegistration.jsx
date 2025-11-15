@@ -73,8 +73,7 @@ const BusinessRegistration = () => {
         subdomain: suggested
       }));
     }
-  }, [formData.businessName]);
-
+ }, [formData.businessName]); // Only trigger on business name change
   // Check subdomain availability
   const checkSubdomain = async () => {
     if (!formData.subdomain) return;
