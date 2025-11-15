@@ -125,7 +125,7 @@ export const syncTransactionToCRM = async (transactionId) => {
       transactionId: transaction.id,
       transactionNumber: transaction.transactionNumber,
       tenantId,
-      customerId: transaction.customerId,
+      tenantCustomerId: transaction.customerId, 
       customerEmail: transaction.customer?.email || '',
       amount: parseFloat(transaction.subtotal || 0),
       tax: parseFloat(transaction.taxAmount || 0),
