@@ -13,6 +13,7 @@ import shiftRoutes from './routes/shiftRoutes.js';
 import stockAdjustmentRoutes from './routes/stockAdjustmentRoutes.js';
 import registrationRoutes from './routes/registration.routes.js';
 import invitationRoutes from './routes/invitation.routes.js';
+import businessRoutes from './routes/businessRoutes.js';
 // ============================================
 // 🔗 INTEGRATION: Import integration routes
 // ============================================
@@ -157,6 +158,7 @@ app.use('/api/v1/shifts', shiftRoutes);
 app.use('/api/v1/stock-adjustments', stockAdjustmentRoutes);
 app.use('/api/v1/registration', registrationRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
+app.use('/api/v1/businesses', businessRoutes);
 
 // ============================================
 // 🔗 INTEGRATION: Register integration routes
