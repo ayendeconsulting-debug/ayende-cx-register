@@ -96,33 +96,43 @@ export const register = asyncHandler(async (req, res) => {
  */
 export const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
+  
+  console.log('[LOGIN ATTEMPT]', { username, hasPassword: !!password }); // ADD THIS
 
-  // Find user - use findFirst for multi-tenant (username is no longer globally unique)
+  // Find user - use findFirst for multi-tenant
   const user = await prisma.user.findFirst({
-    where: { 
+    where: {
       username,
-      isActive: true 
+      isActive: true
     },
     include: {
-      business: true // Include business data for currency and settings
+      business: true
     }
   });
 
+  console.log('[USER FOUND]', user ? `Yes: ${user.username} (${user.business.businessName})` : 'No'); // ADD THIS
+
   if (!user) {
+    console.log('[LOGIN FAILED] User not found'); // ADD THIS
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
-  // Check if user's business is active
-  if (!user.business?.isActive) {
+  // Check business is active
+  if (!user.business.isActive) {
+    console.log('[LOGIN FAILED] Business inactive'); // ADD THIS
     return errorResponse(res, 'Business account is inactive. Please contact support.', 401);
   }
 
   // Verify password
   const isPasswordValid = await comparePassword(password, user.passwordHash);
+  console.log('[PASSWORD CHECK]', isPasswordValid); // ADD THIS
 
   if (!isPasswordValid) {
+    console.log('[LOGIN FAILED] Invalid password'); // ADD THIS
     return errorResponse(res, 'Invalid credentials', 401);
   }
+
+console.log('[LOGIN SUCCESS]', user.username); // ADD THIS
 
   // Update last login
   await prisma.user.update({
