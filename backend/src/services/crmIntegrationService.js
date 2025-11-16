@@ -1,18 +1,3 @@
-/**
- * CRM Integration Service - UPDATED FOR ANONYMOUS TRANSACTIONS
- * Handles synchronization between POS and CRM systems
- * 
- * This service sends data from POS (source of truth for transactions)
- * to CRM (source of truth for customer profiles)
- * 
- * CHANGES IN THIS VERSION:
- * - Added support for anonymous transaction sync
- * - Transactions with anonymous customers now include isAnonymous flag
- * - customerId sent as null for anonymous transactions
- * 
- * INSTRUCTIONS: Replace src/services/crmIntegrationService.js with this file
- */
-
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
@@ -164,6 +149,7 @@ const validateBusinessRelation = (entity, entityType) => {
  * Called immediately after transaction is completed in POS
  * 
  * UPDATED: Now supports anonymous transactions
+ * FIXED: Line 198 - Changed customerId to tenantCustomerId
  */
 export const syncTransactionToCRM = async (transaction) => {
   if (!ENABLE_SYNC) {
@@ -194,8 +180,8 @@ export const syncTransactionToCRM = async (transaction) => {
       // NEW: Include anonymous flag
       isAnonymous: isAnonymous,
       
-      // NEW: For anonymous transactions, don't send customerId
-      customerId: isAnonymous ? null : transaction.customerId,
+      // FIXED: Changed customerId to tenantCustomerId (CRM expects this field name)
+      tenantCustomerId: isAnonymous ? null : transaction.customerId,
       customerEmail: isAnonymous ? null : transaction.customer?.email,
       
       // Financial data
@@ -234,6 +220,18 @@ export const syncTransactionToCRM = async (transaction) => {
       createdBy: transaction.userId,
       timestamp: transaction.createdAt.toISOString(),
     };
+
+    // DEBUG: Log the payload being sent to CRM
+    console.log('[CRM SYNC DEBUG] Transaction payload:', JSON.stringify({
+      transactionId: payload.transactionId,
+      transactionNumber: payload.transactionNumber,
+      tenantCustomerId: payload.tenantCustomerId,
+      isAnonymous: payload.isAnonymous,
+      customerId: transaction.customerId,
+      hasCustomer: !!transaction.customer,
+      customerEmail: transaction.customer?.email,
+      total: payload.total
+    }, null, 2));
 
     // Send to CRM with retry
     await retryOperation(async () => {
@@ -274,16 +272,16 @@ export const syncTransactionToCRM = async (transaction) => {
     const syncDuration = Date.now() - syncStartTime;
     syncMetrics.totalSyncTime += syncDuration;
 
-    console.log(`[CRM SYNC] ${transactionType} ${transaction.transactionNumber} synced successfully (${syncDuration}ms)`);
+    console.log(`[CRM SYNC] Transaction ${transaction.transactionNumber} synced successfully (${syncDuration}ms)`);
   } catch (error) {
     const syncDuration = Date.now() - syncStartTime;
     syncMetrics.failedSyncs++;
     
-    console.error(`[CRM SYNC] Failed to sync ${transactionType} ${transaction.transactionNumber} (${syncDuration}ms)`, {
+    console.error(`[CRM SYNC] Failed to sync transaction ${transaction.transactionNumber} (${syncDuration}ms)`, {
       error: error.message,
       transactionId: transaction.id,
-      isAnonymous: isAnonymous,
       tenantId: transaction.business?.externalTenantId || 'missing',
+      isAnonymous: isAnonymous,
     });
 
     // Log failure
@@ -293,18 +291,17 @@ export const syncTransactionToCRM = async (transaction) => {
       transaction.id,
       transaction.businessId,
       'FAILED',
-      { transactionId: transaction.id, isAnonymous: isAnonymous },
+      { transactionId: transaction.id },
       error
     );
 
-    // Don't throw error - transaction should still complete
-    // Failed syncs will be retried later
+    // Don't throw error - transaction creation should still complete
   }
 };
 
 /**
  * Sync customer to CRM (Real-time)
- * Called when customer is created or updated in POS
+ * Called immediately after customer is created or updated in POS
  */
 export const syncCustomerToCRM = async (customer, operation = 'create') => {
   if (!ENABLE_SYNC) {
@@ -325,48 +322,43 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
     const payload = {
       customerId: customer.id,
       tenantId: tenantId,
-      operation: operation,
-      
-      // Basic info
       email: customer.email,
       firstName: customer.firstName,
       lastName: customer.lastName,
-      phone: customer.phone,
+      phone: customer.phone || '',
+      address: customer.address || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      postalCode: customer.zipCode || '',
+      zipCode: customer.zipCode || '',
+      country: customer.country || '',
       dateOfBirth: customer.dateOfBirth?.toISOString() || null,
-      
-      // Address
-      address: customer.address,
-      city: customer.city,
-      postalCode: customer.postalCode,
-      country: customer.country,
-      
-      // Loyalty
       loyaltyPoints: customer.loyaltyPoints || 0,
       loyaltyTier: customer.loyaltyTier || 'BRONZE',
       totalSpent: parseFloat(customer.totalSpent || 0),
       visitCount: customer.visitCount || 0,
       lastVisit: customer.lastVisit?.toISOString() || null,
-      
-      // Preferences
       marketingOptIn: customer.marketingOptIn || false,
-      
-      // Metadata
-      memberSince: customer.memberSince.toISOString(),
-      updatedAt: customer.updatedAt.toISOString(),
+      notes: customer.notes || '',
+      isActive: customer.isActive !== false,
+      tags: customer.tags || [],
+      preferences: customer.preferences || {},
+      createdAt: customer.createdAt?.toISOString(),
+      updatedAt: customer.updatedAt?.toISOString(),
     };
 
     // Send to CRM with retry
-const response = await retryOperation(async () => {
-  return await crmApiRequest(
-    '/api/v1/sync/customer',
-    'POST',
-    payload,
-    tenantId
-  );
-});
+    const response = await retryOperation(async () => {
+      return await crmApiRequest(
+        '/api/v1/sync/customer',
+        'POST',
+        payload,
+        tenantId
+      );
+    });
 
     // Update customer to mark as synced AND save CRM customer ID
-const updateData = { lastSyncedAt: new Date() };
+    const updateData = { lastSyncedAt: new Date() };
 
     // Save the CRM customer ID if returned
     if (response?.customer?.id) {
