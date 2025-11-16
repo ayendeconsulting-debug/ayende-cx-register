@@ -135,17 +135,30 @@ export const getStockAdjustments = asyncHandler(async (req, res) => {
 
 /**
  * @route   GET /api/v1/stock-adjustments/pending
- * @desc    Get pending approvals
+ * @desc    Get pending approvals count (for notification badge)
  * @access  Private (SUPER_ADMIN only)
+ * 
+ * FIXED: Returns count in format expected by frontend
  */
 export const getPendingApprovals = asyncHandler(async (req, res) => {
-  const pendingAdjustments = await stockAdjustmentService.getPendingApprovals(req.user.businessId);
+  // Only admins can see pending approvals count
+  if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) {
+    return successResponse(res, { count: 0 }, 'No permissions to view pending approvals');
+  }
 
-  return successResponse(
-    res,
-    pendingAdjustments,
-    'Pending approvals retrieved successfully'
-  );
+  try {
+    const count = await stockAdjustmentService.getPendingApprovalsCount(req.user.businessId);
+    
+    return successResponse(
+      res,
+      { count },
+      'Pending approvals count retrieved successfully'
+    );
+  } catch (error) {
+    console.error('Error getting pending approvals count:', error);
+    // Return 0 count on error instead of failing
+    return successResponse(res, { count: 0 }, 'Unable to retrieve pending count');
+  }
 });
 
 /**

@@ -10,6 +10,7 @@ import {
 } from '../controllers/transactionController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validator.js';
+import { requireOpenShift } from '../middleware/shiftGuard.js';
 
 const router = express.Router();
 
@@ -49,10 +50,6 @@ const createTransactionValidation = [
     .optional()
     .isInt({ min: 0 })
     .withMessage('Loyalty points must be a positive number'),
-  body('shiftId')
-    .optional()
-    .isString()
-    .withMessage('Valid shift ID required'),
   body('notes')
     .optional()
     .isString()
@@ -85,10 +82,11 @@ router.get('/number/:transactionNumber', getTransactionByNumber);
 // Get single transaction
 router.get('/:id', getTransaction);
 
-// Create transaction (CASHIER and above)
+// Create transaction (CASHIER and above) - REQUIRES OPEN SHIFT
 router.post(
   '/',
   authorize('SUPER_ADMIN', 'ADMIN', 'CASHIER'),
+  requireOpenShift,  // <-- SHIFT GUARD ADDED HERE
   createTransactionValidation,
   validate,
   createTransaction

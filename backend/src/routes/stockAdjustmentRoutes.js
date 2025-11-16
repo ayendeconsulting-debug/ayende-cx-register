@@ -8,6 +8,41 @@ const router = express.Router();
 router.use(authenticate);
 
 /**
+ * @route   GET /api/v1/stock-adjustments/pending
+ * @desc    Get pending approvals count (for notification badge)
+ * @access  SUPER_ADMIN, ADMIN
+ * 
+ * IMPORTANT: This route MUST come before /:id to avoid route conflicts
+ */
+router.get(
+  '/pending',
+  authorize('SUPER_ADMIN', 'ADMIN'),
+  stockAdjustmentController.getPendingApprovals
+);
+
+/**
+ * @route   GET /api/v1/stock-adjustments/product/:productId/history
+ * @desc    Get stock movement history for a product
+ * @access  INVENTORY_MANAGER, ADMIN, SUPER_ADMIN
+ */
+router.get(
+  '/product/:productId/history',
+  authorize('INVENTORY_MANAGER', 'ADMIN', 'SUPER_ADMIN'),
+  stockAdjustmentController.getStockMovementHistory
+);
+
+/**
+ * @route   GET /api/v1/stock-adjustments
+ * @desc    Get all stock adjustments with filters
+ * @access  INVENTORY_MANAGER, ADMIN, SUPER_ADMIN
+ */
+router.get(
+  '/',
+  authorize('INVENTORY_MANAGER', 'ADMIN', 'SUPER_ADMIN'),
+  stockAdjustmentController.getStockAdjustments
+);
+
+/**
  * @route   POST /api/v1/stock-adjustments
  * @desc    Create a new stock adjustment
  * @access  INVENTORY_MANAGER, ADMIN, SUPER_ADMIN
@@ -19,31 +54,9 @@ router.post(
 );
 
 /**
- * @route   GET /api/v1/stock-adjustments/pending
- * @desc    Get pending approvals
- * @access  SUPER_ADMIN only
- */
-router.get(
-  '/pending',
-  authorize('SUPER_ADMIN'),
-  stockAdjustmentController.getPendingApprovals
-);
-
-/**
- * @route   GET /api/v1/stock-adjustments
- * @desc    Get all stock adjustments (filtered by role)
- * @access  INVENTORY_MANAGER (own), ADMIN, SUPER_ADMIN (all)
- */
-router.get(
-  '/',
-  authorize('INVENTORY_MANAGER', 'ADMIN', 'SUPER_ADMIN'),
-  stockAdjustmentController.getStockAdjustments
-);
-
-/**
  * @route   GET /api/v1/stock-adjustments/:id
  * @desc    Get stock adjustment by ID
- * @access  INVENTORY_MANAGER (own), ADMIN, SUPER_ADMIN
+ * @access  INVENTORY_MANAGER (own only), ADMIN, SUPER_ADMIN
  */
 router.get(
   '/:id',
@@ -76,23 +89,12 @@ router.post(
 /**
  * @route   POST /api/v1/stock-adjustments/:id/cancel
  * @desc    Cancel a pending stock adjustment
- * @access  Creator only (verified in controller)
+ * @access  Creator only (checked in controller)
  */
 router.post(
   '/:id/cancel',
   authorize('INVENTORY_MANAGER', 'ADMIN', 'SUPER_ADMIN'),
   stockAdjustmentController.cancelStockAdjustment
-);
-
-/**
- * @route   GET /api/v1/stock-adjustments/product/:productId/history
- * @desc    Get stock movement history for a product
- * @access  INVENTORY_MANAGER, ADMIN, SUPER_ADMIN
- */
-router.get(
-  '/product/:productId/history',
-  authorize('INVENTORY_MANAGER', 'ADMIN', 'SUPER_ADMIN'),
-  stockAdjustmentController.getStockMovementHistory
 );
 
 export default router;

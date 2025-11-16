@@ -5,15 +5,25 @@ import * as transactionService from '../services/transactionService.js';
 /**
  * @route   POST /api/v1/transactions
  * @desc    Create new transaction (sale)
- * @access  Private (CASHIER, ADMIN)
+ * @access  Private (CASHIER, ADMIN) - Requires open shift
  */
 export const createTransaction = asyncHandler(async (req, res) => {
-  // FIXED: Pass parameters in correct order (businessId, transactionData, userId)
+  // currentShift is attached by requireOpenShift middleware
+  const { currentShift } = req;
+  
+  // Add shiftId to transaction data
+  const transactionData = {
+    ...req.body,
+    shiftId: currentShift.id  // Link transaction to current shift
+  };
+  
+  // Create transaction with shift association
   const transaction = await transactionService.createTransaction(
     req.user.businessId,
-    req.body,
+    transactionData,
     req.user.id
   );
+  
   return createdResponse(res, transaction, 'Transaction completed successfully');
 });
 
@@ -29,6 +39,7 @@ export const getTransactions = asyncHandler(async (req, res) => {
     status: req.query.status,
     customerId: req.query.customerId,
     userId: req.user.role === 'CASHIER' ? req.user.id : req.query.userId,
+    shiftId: req.query.shiftId,
     startDate: req.query.startDate,
     endDate: req.query.endDate,
     minAmount: req.query.minAmount,
@@ -56,7 +67,6 @@ export const getTransactions = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getTransaction = asyncHandler(async (req, res) => {
-  // FIXED: Pass businessId first
   const transaction = await transactionService.getTransactionById(req.user.businessId, req.params.id);
   
   // Cashiers can only view their own transactions
@@ -76,7 +86,10 @@ export const getTransaction = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getTransactionByNumber = asyncHandler(async (req, res) => {
-  const transaction = await transactionService.getTransactionByNumber(req.params.transactionNumber, req.user.businessId);
+  const transaction = await transactionService.getTransactionByNumber(
+    req.params.transactionNumber, 
+    req.user.businessId
+  );
   
   // Cashiers can only view their own transactions
   if (req.user.role === 'CASHIER' && transaction.userId !== req.user.id) {
@@ -120,9 +133,14 @@ export const voidTransaction = asyncHandler(async (req, res) => {
  * @access  Private (ADMIN only)
  */
 export const getSalesSummary = asyncHandler(async (req, res) => {
-  const { startDate, endDate } = req.query;
+  const { startDate, endDate, shiftId } = req.query;
   
-  const summary = await transactionService.getSalesSummary(req.user.businessId, startDate, endDate);
+  const summary = await transactionService.getSalesSummary(
+    req.user.businessId, 
+    startDate, 
+    endDate,
+    shiftId
+  );
   
   return successResponse(res, summary, 'Sales summary retrieved successfully');
 });

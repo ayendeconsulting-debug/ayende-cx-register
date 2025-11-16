@@ -4,33 +4,48 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+
+// ============================================
+// CORE ROUTES
+// ============================================
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
+import businessRoutes from './routes/businessRoutes.js';
+
+// ============================================
+// SHIFT & STOCK MANAGEMENT ROUTES
+// ============================================
 import shiftRoutes from './routes/shiftRoutes.js';
 import stockAdjustmentRoutes from './routes/stockAdjustmentRoutes.js';
+
+// ============================================
+// REGISTRATION & INVITATION ROUTES
+// ============================================
 import registrationRoutes from './routes/registration.routes.js';
 import invitationRoutes from './routes/invitation.routes.js';
-import businessRoutes from './routes/businessRoutes.js';
+
 // ============================================
-// 🔗 INTEGRATION: Import integration routes
+// INTEGRATION ROUTES
 // ============================================
 import integrationRoutes from './routes/integration.routes.js';
-// ============================================
-// 🔗 PHASE 2C: Import webhook routes
-// ============================================
 import customerSyncRoutes from './routes/integration/customerSync.js';
 import integrationWebhookRoutes from './routes/integration-webhooks.js';
-// ============================================
-// 🔗 CRM → POS WEBHOOKS: Import webhook receiver
-// ============================================
 import webhookRoutes from './routes/webhooks.js';
-import * as syncJob from './cron/syncJob.js';
-import { initializeReconciliationJob } from './cron/reconciliationJob.js';
+
+// ============================================
+// ADMIN & RECONCILIATION ROUTES
+// ============================================
 import reconciliationRoutes from './routes/reconciliationRoutes.js';
 import adminRoutes from './routes/admin.js';
+
+// ============================================
+// CRON JOBS
+// ============================================
+import * as syncJob from './cron/syncJob.js';
+import { initializeReconciliationJob } from './cron/reconciliationJob.js';
 import { initializeEmailJobs } from './cron/emailJobs.js';
 import { initCrmSyncScheduler } from './jobs/crmSyncScheduler.js';
 
@@ -122,6 +137,8 @@ app.get('/health', async (req, res) => {
         crmSync: process.env.ENABLE_REALTIME_SYNC === 'true',
         webhooks: process.env.ENABLE_CRM_SYNC === 'true',
         emailNotifications: process.env.ENABLE_RECEIPT_EMAILS === 'true',
+        shifts: true,
+        stockAdjustments: true,
       },
     });
   } catch (error) {
@@ -147,33 +164,37 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes
+// ============================================
+// API ROUTES REGISTRATION
+// ============================================
 const API_VERSION = process.env.API_VERSION || 'v1';
+
+// Core business routes
 app.use(`/api/${API_VERSION}/auth`, authRoutes);
 app.use(`/api/${API_VERSION}/products`, productRoutes);
 app.use(`/api/${API_VERSION}/categories`, categoryRoutes);
 app.use(`/api/${API_VERSION}/transactions`, transactionRoutes);
 app.use(`/api/${API_VERSION}/customers`, customerRoutes);
-app.use('/api/v1/shifts', shiftRoutes);
-app.use('/api/v1/stock-adjustments', stockAdjustmentRoutes);
-app.use('/api/v1/registration', registrationRoutes);
-app.use('/api/v1/invitations', invitationRoutes);
-app.use('/api/v1/businesses', businessRoutes);
+app.use(`/api/${API_VERSION}/businesses`, businessRoutes);
 
-// ============================================
-// 🔗 INTEGRATION: Register integration routes
-// ============================================
-app.use('/api/v1/integration', integrationRoutes);
-// ============================================
-// 🔗 PHASE 2C: Register webhook routes
-// ============================================
+// Shift and stock management routes
+app.use(`/api/${API_VERSION}/shifts`, shiftRoutes);
+app.use(`/api/${API_VERSION}/stock-adjustments`, stockAdjustmentRoutes);
+
+// Registration and invitation routes
+app.use(`/api/${API_VERSION}/registration`, registrationRoutes);
+app.use(`/api/${API_VERSION}/invitations`, invitationRoutes);
+
+// Integration routes
+app.use(`/api/${API_VERSION}/integration`, integrationRoutes);
 app.use('/api/integration', customerSyncRoutes);
 app.use('/api/integration/webhook', integrationWebhookRoutes);
-// ============================================
-// 🔗 CRM → POS WEBHOOKS: Register webhook receiver routes
-// ============================================
-app.use('/api/v1/webhooks', webhookRoutes);
-app.use('/api/v1/reconciliation', reconciliationRoutes);
+app.use(`/api/${API_VERSION}/webhooks`, webhookRoutes);
+app.use(`/api/${API_VERSION}/reconciliation`, reconciliationRoutes);
+
+// Admin routes
+app.use('/api/admin', adminRoutes);
+
 // ============================================
 // BASH EVENTS PRODUCT IMPORT - One-time endpoint
 // ============================================
@@ -181,17 +202,18 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
   try {
     const { PrismaClient } = await import('@prisma/client');
     const prisma = new PrismaClient();
-    const BASH_EVENTS_TENANT_ID = 'a-cx-m3b9o';
+    
+    const BASH_EVENTS_TENANT_ID = process.env.BASH_EVENTS_TENANT_ID || '0cc33bf2-f1b5-4e72-8743-cd39a2cb8f98';
     
     const categories = [
-      { name: 'Tableware', description: 'Plates, cutlery, glasses, and dining accessories' },
-      { name: 'Furniture', description: 'Chairs, tables, and seating arrangements' },
-      { name: 'Lighting', description: 'Event lighting and ambiance equipment' },
-      { name: 'Decor', description: 'Decorative items and accessories' },
-      { name: 'Linens', description: 'Tablecloths, napkins, and fabric accessories' },
-      { name: 'Serving Equipment', description: 'Chafing dishes, trays, and serving items' },
-      { name: 'Nigerian Cuisine', description: 'Traditional Nigerian dishes and delicacies' },
-      { name: 'English Cuisine', description: 'Classic English and Continental dishes' },
+      { name: 'Tableware', description: 'Plates, cutlery, glasses, and serving items' },
+      { name: 'Furniture', description: 'Tables, chairs, and seating arrangements' },
+      { name: 'Lighting', description: 'Uplighting, chandeliers, and decorative lighting' },
+      { name: 'Decor', description: 'Centerpieces, backdrops, and decorative items' },
+      { name: 'Linens', description: 'Tablecloths, napkins, and chair covers' },
+      { name: 'Serving Equipment', description: 'Chafing dishes and serving tools' },
+      { name: 'Nigerian Cuisine', description: 'Traditional Nigerian dishes and party trays' },
+      { name: 'English Cuisine', description: 'Traditional English dishes and catering' },
       { name: 'Beverages', description: 'Drinks and beverage packages' },
     ];
 
@@ -256,32 +278,38 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
         name: prod.name,
         description: prod.description,
         price: prod.price,
-        costPrice: prod.price * 0.6,  // ✓ Correct field
+        costPrice: prod.price * 0.6,
         stockQuantity: prod.stock,
-        lowStockAlert: 10,  // Default low stock alert
+        lowStockAlert: 10,
         unit: 'piece',
         sku: `BASH-${Date.now()}-${count}`,
-        barcode: null,  // ✓ Allowed
-        imageUrl: null,  // ✓ Allowed
+        barcode: null,
+        imageUrl: null,
         isActive: true,
-        isTaxable: true,  // Default true
-        loyaltyPoints: 0,  // Default 0
-        currency: '₦',  // Nigerian Naira
-        currencyCode: 'NGN',  // Nigerian Naira code
+        isTaxable: true,
+        loyaltyPoints: 0,
+        currency: '₦',
+        currencyCode: 'NGN',
       }
     });
     count++;
   }
 
     await prisma.$disconnect();
-    res.json({ success: true, message: 'Import complete!', summary: { business: business.businessName, categories: Object.keys(createdCategories).length, products: count } });
+    res.json({ 
+      success: true, 
+      message: 'Import complete!', 
+      summary: { 
+        business: business.businessName, 
+        categories: Object.keys(createdCategories).length, 
+        products: count 
+      } 
+    });
   } catch (error) {
     console.error('[IMPORT]', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
-app.use('/api/admin', adminRoutes);
 
 // List all businesses
 app.get('/api/v1/admin/list-businesses', async (req, res) => {
@@ -298,13 +326,19 @@ app.get('/api/v1/admin/list-businesses', async (req, res) => {
   }
 });
 
+// ============================================
+// ERROR HANDLERS
+// ============================================
+
 // 404 handler
 app.use(notFound);
 
 // Global error handler
 app.use(errorHandler);
 
-// Start server
+// ============================================
+// SERVER STARTUP
+// ============================================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
@@ -320,12 +354,16 @@ app.listen(PORT, () => {
     ║   🔗 Webhooks: ENABLED (Phase 2C)         ║
     ║   🔗 CRM Webhooks: ENABLED (CRM→POS)      ║
     ║   🔗 Sync Job: ENABLED (Phase 2D)         ║
+    ║   💼 Shifts: ENABLED                      ║
+    ║   📦 Stock Adjustments: ENABLED           ║
     ╚═══════════════════════════════════════╝
   `);
   
   // ============================================
-  // PHASE 2D: Initialize sync cron job
+  // INITIALIZE CRON JOBS
   // ============================================
+  
+  // Phase 2D: Sync job
   if (process.env.ENABLE_REALTIME_SYNC === 'true') {
     try {
       syncJob.initializeSyncJob();
@@ -336,18 +374,16 @@ app.listen(PORT, () => {
   } else {
     console.log('  ⚠  Sync job disabled (ENABLE_REALTIME_SYNC=false)\n');
   }
-  // ============================================
-// PHASE 2E: Initialize reconciliation cron job
-// ============================================
-    try {
-      initializeReconciliationJob();
-      console.log('  ✓ Reconciliation job initialized successfully\n');
-    } catch (error) {
-      console.error('  ✗ Failed to initialize reconciliation job:', error.message);
-    }
-        // ============================================
-    // PHASE 2F: Initialize email cron jobs
-    // ============================================
+  
+  // Phase 2E: Reconciliation job
+  try {
+    initializeReconciliationJob();
+    console.log('  ✓ Reconciliation job initialized successfully\n');
+  } catch (error) {
+    console.error('  ✗ Failed to initialize reconciliation job:', error.message);
+  }
+  
+  // Phase 2F: Email jobs
   if (process.env.ENABLE_EOD_REPORTS === 'true' || process.env.ENABLE_LOW_STOCK_ALERTS === 'true') {
     try {
       initializeEmailJobs();
@@ -355,14 +391,19 @@ app.listen(PORT, () => {
     } catch (error) {
       console.error('  ✗ Failed to initialize email jobs:', error.message);
     }
-    } else {
-      console.log('  ⚠  Email jobs disabled\n');
-
+  } else {
+    console.log('  ⚠  Email jobs disabled\n');
+  }
+  
+  // CRM sync scheduler
   if (process.env.ENABLE_CRM_SYNC === 'true') {
+    try {
       initCrmSyncScheduler();
       console.log('  ✓ CRM sync scheduler initialized successfully');
-}
+    } catch (error) {
+      console.error('  ✗ Failed to initialize CRM sync scheduler:', error.message);
     }
+  }
 });
 
 // Handle unhandled promise rejections
