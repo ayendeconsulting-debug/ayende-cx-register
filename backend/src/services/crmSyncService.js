@@ -158,7 +158,7 @@ export const syncTransactionToCRM = async (transactionId) => {
       hasCustomer: !!transaction.customer,
       customerEmail: transaction.customer?.email
     }, null, 2));
-    
+
     // Send to CRM
     const url = `${CRM_BASE_URL}/api/v1/sync/transaction`;
     
