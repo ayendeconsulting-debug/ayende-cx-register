@@ -3,6 +3,9 @@
  * Runs periodically to ensure data consistency
  * Acts as backup to real-time webhooks
  * 
+ * FIXED: Removed syncLog dependency (model doesn't exist in schema)
+ * Uses console logging instead
+ * 
  * Location: src/jobs/crmSyncScheduler.js
  */
 
@@ -31,20 +34,9 @@ async function syncCustomersFromCRM(businessId) {
       return { synced: 0, errors: 0 };
     }
 
-    // Get last sync timestamp
-    const lastSync = await prisma.syncLog.findFirst({
-      where: {
-        businessId,
-        syncType: 'CRM_TO_POS',
-        entityType: 'customer',
-        status: 'SUCCESS'
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    const lastSyncTime = lastSync ? lastSync.createdAt.toISOString() : null;
-    
-    console.log(`[CRM SYNC] Last sync: ${lastSyncTime || 'Never'}`);
+    // REMOVED: syncLog query - using simple timestamp tracking instead
+    // For now, sync all customers (can optimize later with lastSyncedAt tracking)
+    console.log(`[CRM SYNC] Syncing all customers (full sync)`);
 
     // Generate JWT token for CRM API
     const token = generateAccessToken({
@@ -54,18 +46,17 @@ async function syncCustomersFromCRM(businessId) {
       role: 'SYSTEM'
     });
 
-    // Fetch updated customers from CRM
+    // Fetch customers from CRM
     const crmUrl = process.env.CRM_API_URL || 'https://staging.ayendecx.com';
-    const url = lastSyncTime 
-      ? `${crmUrl}/api/sync/customers?updated_since=${lastSyncTime}`
-      : `${crmUrl}/api/sync/customers`;
+    const url = `${crmUrl}/api/sync/customers`;
 
     console.log(`[CRM SYNC] Fetching from: ${url}`);
 
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Tenant-ID': business.externalTenantId
       }
     });
 
@@ -83,7 +74,7 @@ async function syncCustomersFromCRM(businessId) {
 
     for (const crmCustomer of customers) {
       try {
-        // Check if customer exists in POS by externalId
+        // Check if customer exists in POS by externalId (CRM customer ID)
         const existingCustomer = await prisma.customer.findFirst({
           where: {
             businessId,
@@ -107,10 +98,10 @@ async function syncCustomersFromCRM(businessId) {
               lastSyncedAt: new Date()
             }
           });
-          console.log(`[CRM SYNC] Updated customer: ${existingCustomer.id}`);
+          console.log(`[CRM SYNC] ✅ Updated customer: ${crmCustomer.first_name} ${crmCustomer.last_name} (${existingCustomer.id})`);
         } else {
-          // Create new customer from CRM
-          await prisma.customer.create({
+          // Create new customer from CRM (shouldn't happen often - POS creates first)
+          const newCustomer = await prisma.customer.create({
             data: {
               businessId,
               externalId: crmCustomer.id,
@@ -129,50 +120,26 @@ async function syncCustomersFromCRM(businessId) {
               isAnonymous: false
             }
           });
-          console.log(`[CRM SYNC] Created customer from CRM: ${crmCustomer.id}`);
+          console.log(`[CRM SYNC] ✅ Created customer from CRM: ${crmCustomer.first_name} ${crmCustomer.last_name} (${newCustomer.id})`);
         }
 
         synced++;
       } catch (error) {
-        console.error(`[CRM SYNC] Error syncing customer ${crmCustomer.id}:`, error.message);
+        console.error(`[CRM SYNC] ❌ Error syncing customer ${crmCustomer.id}:`, error.message);
         errors++;
       }
     }
 
-    // Log sync result
-    await prisma.syncLog.create({
-      data: {
-        businessId,
-        syncType: 'CRM_TO_POS',
-        entityType: 'customer',
-        status: errors > 0 ? 'PARTIAL' : 'SUCCESS',
-        recordsProcessed: customers.length,
-        recordsSynced: synced,
-        recordsFailed: errors,
-        errorMessage: errors > 0 ? `${errors} customers failed to sync` : null
-      }
-    });
-
-    console.log(`[CRM SYNC] Completed: ${synced} synced, ${errors} errors`);
+    // REMOVED: syncLog.create() - just log to console
+    console.log(`[CRM SYNC] ✅ Completed: ${synced} synced, ${errors} errors`);
 
     return { synced, errors };
 
   } catch (error) {
-    console.error(`[CRM SYNC] Failed for business ${businessId}:`, error);
+    console.error(`[CRM SYNC] ❌ Failed for business ${businessId}:`, error);
     
-    // Log failed sync
-    await prisma.syncLog.create({
-      data: {
-        businessId,
-        syncType: 'CRM_TO_POS',
-        entityType: 'customer',
-        status: 'FAILED',
-        recordsProcessed: 0,
-        recordsSynced: 0,
-        recordsFailed: 0,
-        errorMessage: error.message
-      }
-    });
+    // REMOVED: syncLog.create() for failed sync - just log to console
+    console.error(`[CRM SYNC] Error details:`, error.message);
 
     return { synced: 0, errors: 1 };
   }
@@ -223,7 +190,7 @@ async function runScheduledSync() {
     console.log(`[CRM SYNC] Completed at ${new Date().toISOString()}\n`);
 
   } catch (error) {
-    console.error('[CRM SYNC] Scheduled sync failed:', error);
+    console.error('[CRM SYNC] ❌ Scheduled sync failed:', error);
   }
 }
 
@@ -233,15 +200,15 @@ async function runScheduledSync() {
  */
 export function initCrmSyncScheduler() {
   console.log('[CRM SYNC] Initializing CRM → POS sync scheduler');
-  
+
   // Run every 30 minutes
   const schedule = '*/30 * * * *';
-  
+
   cron.schedule(schedule, runScheduledSync);
-  
+
   console.log(`[CRM SYNC] Scheduler initialized: ${schedule} (every 30 minutes)`);
   console.log('[CRM SYNC] Next run:', new Date(Date.now() + 30 * 60 * 1000).toISOString());
-  
+
   // Run once immediately on startup (optional)
   if (process.env.RUN_SYNC_ON_STARTUP === 'true') {
     console.log('[CRM SYNC] Running initial sync on startup...');
