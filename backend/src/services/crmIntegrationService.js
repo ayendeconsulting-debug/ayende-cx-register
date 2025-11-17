@@ -48,6 +48,7 @@ const crmApiRequest = async (endpoint, method, data, businessId) => {
   }
 
   const startTime = Date.now();
+  let tenantId;  // Declare at function level so it's accessible in catch
 
   try {
     // Get business to access externalTenantId
@@ -60,7 +61,7 @@ const crmApiRequest = async (endpoint, method, data, businessId) => {
       throw new Error(`Business ${businessId} has no externalTenantId (CRM tenant UUID)`);
     }
 
-    const tenantId = business.externalTenantId;
+    tenantId = business.externalTenantId;  // Remove 'const'
     const token = generateIntegrationToken(tenantId);
 
     const response = await axios({
