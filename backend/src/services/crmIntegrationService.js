@@ -63,6 +63,7 @@ const crmApiRequest = async (endpoint, method, data, businessId) => {
 
     tenantId = business.externalTenantId;  // Remove 'const'
     const token = generateIntegrationToken(tenantId);
+    const url = `${CRM_API_URL}${endpoint}`;  // ADD THIS LINE
 
     const response = await axios({
       method,
