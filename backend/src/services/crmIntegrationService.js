@@ -41,7 +41,7 @@ const generateIntegrationToken = (tenantId) => {
 /**
  * Make authenticated request to CRM API
  */
-const crmApiRequest = async (endpoint, method, data, tenantId) => {
+const crmApiRequest = async (endpoint, method, data, businessId) => {
   if (!ENABLE_SYNC) {
     console.log('[CRM SYNC] Sync disabled, skipping request');
     return null;
@@ -50,8 +50,18 @@ const crmApiRequest = async (endpoint, method, data, tenantId) => {
   const startTime = Date.now();
 
   try {
+    // Get business to access externalTenantId
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      select: { externalTenantId: true }
+    });
+
+    if (!business?.externalTenantId) {
+      throw new Error(`Business ${businessId} has no externalTenantId (CRM tenant UUID)`);
+    }
+
+    const tenantId = business.externalTenantId;
     const token = generateIntegrationToken(tenantId);
-    const url = `${CRM_API_URL}${endpoint}`;
 
     const response = await axios({
       method,
