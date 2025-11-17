@@ -6,12 +6,39 @@
  * FIXED: Removed syncLog dependency (model doesn't exist in schema)
  * Uses console logging instead
  * 
+ * FIXED: Use generateIntegrationToken for proper JWT authentication
+ * 
  * Location: src/jobs/crmSyncScheduler.js
  */
 
 import cron from 'node-cron';
+import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
-import { generateAccessToken } from '../utils/auth.js';
+
+// Configuration
+const CRM_API_URL = process.env.CRM_API_URL || 'https://ayendecx.com';
+const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET;
+
+/**
+ * Generate JWT token for system-to-system authentication
+ * Must match the format expected by CRM's verify_jwt_token()
+ */
+function generateIntegrationToken(tenantId) {
+  if (!INTEGRATION_SECRET) {
+    throw new Error('INTEGRATION_SECRET not configured');
+  }
+
+  return jwt.sign(
+    {
+      iss: 'ayende-pos',
+      sub: 'system-to-system',
+      tenantId,
+      scope: 'integration',
+    },
+    INTEGRATION_SECRET,
+    { expiresIn: '1h' }
+  );
+}
 
 /**
  * Fetch customers from CRM that were updated since last sync
@@ -38,19 +65,14 @@ async function syncCustomersFromCRM(businessId) {
     // For now, sync all customers (can optimize later with lastSyncedAt tracking)
     console.log(`[CRM SYNC] Syncing all customers (full sync)`);
 
-    // Generate JWT token for CRM API
-    const token = generateAccessToken({
-      businessId,
-      tenantId: business.externalTenantId,
-      email: 'sync@ayende-cx.com',
-      role: 'SYSTEM'
-    });
+    // Generate JWT token for CRM API - FIXED: Use integration token format
+    const token = generateIntegrationToken(business.externalTenantId);
 
     // Fetch customers from CRM
-    const crmUrl = process.env.CRM_API_URL || 'https://staging.ayendecx.com';
-    const url = `${crmUrl}/api/sync/customers`;
+    const url = `${CRM_API_URL}/api/sync/customers`;
 
     console.log(`[CRM SYNC] Fetching from: ${url}`);
+    console.log(`[CRM SYNC] Using tenant ID: ${business.externalTenantId}`);
 
     const response = await fetch(url, {
       headers: {
@@ -61,7 +83,8 @@ async function syncCustomersFromCRM(businessId) {
     });
 
     if (!response.ok) {
-      throw new Error(`CRM API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`CRM API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
@@ -98,7 +121,7 @@ async function syncCustomersFromCRM(businessId) {
               lastSyncedAt: new Date()
             }
           });
-          console.log(`[CRM SYNC] ✅ Updated customer: ${crmCustomer.first_name} ${crmCustomer.last_name} (${existingCustomer.id})`);
+          console.log(`[CRM SYNC] Updated customer: ${crmCustomer.first_name} ${crmCustomer.last_name} (${existingCustomer.id})`);
         } else {
           // Create new customer from CRM (shouldn't happen often - POS creates first)
           const newCustomer = await prisma.customer.create({
@@ -120,23 +143,23 @@ async function syncCustomersFromCRM(businessId) {
               isAnonymous: false
             }
           });
-          console.log(`[CRM SYNC] ✅ Created customer from CRM: ${crmCustomer.first_name} ${crmCustomer.last_name} (${newCustomer.id})`);
+          console.log(`[CRM SYNC] Created customer from CRM: ${crmCustomer.first_name} ${crmCustomer.last_name} (${newCustomer.id})`);
         }
 
         synced++;
       } catch (error) {
-        console.error(`[CRM SYNC] ❌ Error syncing customer ${crmCustomer.id}:`, error.message);
+        console.error(`[CRM SYNC] Error syncing customer ${crmCustomer.id}:`, error.message);
         errors++;
       }
     }
 
     // REMOVED: syncLog.create() - just log to console
-    console.log(`[CRM SYNC] ✅ Completed: ${synced} synced, ${errors} errors`);
+    console.log(`[CRM SYNC] Completed: ${synced} synced, ${errors} errors`);
 
     return { synced, errors };
 
   } catch (error) {
-    console.error(`[CRM SYNC] ❌ Failed for business ${businessId}:`, error);
+    console.error(`[CRM SYNC] Failed for business ${businessId}:`, error);
     
     // REMOVED: syncLog.create() for failed sync - just log to console
     console.error(`[CRM SYNC] Error details:`, error.message);
@@ -149,9 +172,9 @@ async function syncCustomersFromCRM(businessId) {
  * Run sync for all active businesses
  */
 async function runScheduledSync() {
-  console.log('\n╔═══════════════════════════════════════════╗');
+  console.log('\n╔════════════════════════════════════════════╗');
   console.log('║  CRM → POS SCHEDULED SYNC - STARTING      ║');
-  console.log('╚═══════════════════════════════════════════╝');
+  console.log('╚════════════════════════════════════════════╝');
   console.log(`[CRM SYNC] Started at ${new Date().toISOString()}`);
 
   try {
@@ -182,15 +205,15 @@ async function runScheduledSync() {
       totalErrors += result.errors;
     }
 
-    console.log('\n╔═══════════════════════════════════════════╗');
+    console.log('\n╔════════════════════════════════════════════╗');
     console.log('║  CRM → POS SCHEDULED SYNC - COMPLETED     ║');
-    console.log('╚═══════════════════════════════════════════╝');
+    console.log('╚════════════════════════════════════════════╝');
     console.log(`[CRM SYNC] Total synced: ${totalSynced}`);
     console.log(`[CRM SYNC] Total errors: ${totalErrors}`);
     console.log(`[CRM SYNC] Completed at ${new Date().toISOString()}\n`);
 
   } catch (error) {
-    console.error('[CRM SYNC] ❌ Scheduled sync failed:', error);
+    console.error('[CRM SYNC] Scheduled sync failed:', error);
   }
 }
 
