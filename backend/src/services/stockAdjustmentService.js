@@ -537,6 +537,21 @@ export const getPendingApprovals = async (businessId) => {
 };
 
 /**
+ * Get count of pending approvals (for notification badge)
+ */
+export const getPendingApprovalsCount = async (businessId) => {
+  const count = await prisma.stockAdjustment.count({
+    where: {
+      businessId,
+      status: 'PENDING',
+      requiresApproval: true,
+    },
+  });
+
+  return count;
+};
+
+/**
  * Get stock adjustment by ID
  */
 export const getStockAdjustmentById = async (businessId, adjustmentId) => {

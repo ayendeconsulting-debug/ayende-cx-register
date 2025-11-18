@@ -62,6 +62,7 @@ dotenv.config();
 
 // Initialize Express app
 const app = express();
+app.set('trust proxy', 1);  // Add this line
 
 // Security middleware - Enhanced configuration
 app.use(helmet({
