@@ -97,6 +97,14 @@ async function syncCustomersFromCRM(businessId) {
 
     for (const crmCustomer of customers) {
       try {
+        // Handle both snake_case and camelCase field names from CRM
+        const firstName = crmCustomer.first_name || crmCustomer.firstName || 'Customer';
+        const lastName = crmCustomer.last_name || crmCustomer.lastName || '';
+        const loyaltyPoints = crmCustomer.loyalty_points ?? crmCustomer.loyaltyPoints ?? 0;
+        const loyaltyTier = crmCustomer.loyalty_tier || crmCustomer.loyaltyTier || 'BRONZE';
+        const totalSpent = crmCustomer.total_spent ?? crmCustomer.totalSpent ?? 0;
+        const visitCount = crmCustomer.visit_count ?? crmCustomer.visitCount ?? 0;
+
         // Check if customer exists in POS by externalId (CRM customer ID)
         const existingCustomer = await prisma.customer.findFirst({
           where: {
@@ -110,32 +118,32 @@ async function syncCustomersFromCRM(businessId) {
           await prisma.customer.update({
             where: { id: existingCustomer.id },
             data: {
-              firstName: crmCustomer.first_name,
-              lastName: crmCustomer.last_name,
+              firstName: firstName || existingCustomer.firstName,
+              lastName: lastName || existingCustomer.lastName,
               email: crmCustomer.email || existingCustomer.email,
               phone: crmCustomer.phone || existingCustomer.phone,
-              loyaltyPoints: crmCustomer.loyalty_points || existingCustomer.loyaltyPoints,
-              loyaltyTier: crmCustomer.loyalty_tier || existingCustomer.loyaltyTier,
-              totalSpent: crmCustomer.total_spent || existingCustomer.totalSpent,
+              loyaltyPoints: loyaltyPoints,
+              loyaltyTier: loyaltyTier,
+              totalSpent: totalSpent,
               syncState: 'SYNCED',
               lastSyncedAt: new Date()
             }
           });
-          console.log(`[CRM SYNC] Updated customer: ${crmCustomer.first_name} ${crmCustomer.last_name} (${existingCustomer.id})`);
+          console.log(`[CRM SYNC] Updated customer: ${firstName} ${lastName} (${existingCustomer.id})`);
         } else {
           // Create new customer from CRM (shouldn't happen often - POS creates first)
           const newCustomer = await prisma.customer.create({
             data: {
               businessId,
               externalId: crmCustomer.id,
-              firstName: crmCustomer.first_name,
-              lastName: crmCustomer.last_name,
+              firstName: firstName,
+              lastName: lastName,
               email: crmCustomer.email || null,
               phone: crmCustomer.phone || null,
-              loyaltyPoints: crmCustomer.loyalty_points || 0,
-              loyaltyTier: crmCustomer.loyalty_tier || 'BRONZE',
-              totalSpent: crmCustomer.total_spent || 0,
-              visitCount: crmCustomer.visit_count || 0,
+              loyaltyPoints: loyaltyPoints,
+              loyaltyTier: loyaltyTier,
+              totalSpent: totalSpent,
+              visitCount: visitCount,
               customerSource: 'CRM',
               syncState: 'SYNCED',
               lastSyncedAt: new Date(),
@@ -143,7 +151,7 @@ async function syncCustomersFromCRM(businessId) {
               isAnonymous: false
             }
           });
-          console.log(`[CRM SYNC] Created customer from CRM: ${crmCustomer.first_name} ${crmCustomer.last_name} (${newCustomer.id})`);
+          console.log(`[CRM SYNC] Created customer from CRM: ${firstName} ${lastName} (${newCustomer.id})`);
         }
 
         synced++;
