@@ -251,7 +251,7 @@ export const syncTransactionToCRM = async (transaction) => {
         '/api/v1/sync/transaction',
         'POST',
         payload,
-        tenantId
+        transaction.businessId
       );
     });
 
@@ -365,7 +365,7 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
         '/api/v1/sync/customer',
         'POST',
         payload,
-        tenantId
+        customer.businessId
       );
     });
 
