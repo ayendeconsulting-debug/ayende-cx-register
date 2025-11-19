@@ -106,18 +106,32 @@ async function syncCustomersFromCRM(businessId) {
         const visitCount = crmCustomer.visit_count ?? crmCustomer.visitCount ?? 0;
 
         // Check if customer exists in POS by externalId (CRM customer ID)
-        const existingCustomer = await prisma.customer.findFirst({
-          where: {
-            businessId,
-            externalId: crmCustomer.id
+          let existingCustomer = await prisma.customer.findFirst({
+            where: {
+              businessId,
+              externalId: crmCustomer.id
+            }
+          });
+
+          // Fallback: find by email or phone if not found by externalId
+          if (!existingCustomer && (crmCustomer.email || crmCustomer.phone)) {
+            existingCustomer = await prisma.customer.findFirst({
+              where: {
+                businessId,
+                OR: [
+                  ...(crmCustomer.email ? [{ email: crmCustomer.email }] : []),
+                  ...(crmCustomer.phone ? [{ phone: crmCustomer.phone }] : [])
+                ]
+              }
+            });
           }
-        });
 
         if (existingCustomer) {
           // Update existing customer
           await prisma.customer.update({
             where: { id: existingCustomer.id },
             data: {
+              externalId: crmCustomer.id,  // Set externalId if it was missing
               firstName: firstName || existingCustomer.firstName,
               lastName: lastName || existingCustomer.lastName,
               email: crmCustomer.email || existingCustomer.email,
