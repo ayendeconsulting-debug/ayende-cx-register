@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import stockAdjustmentService from '../services/stockAdjustmentService';
 import toast from 'react-hot-toast';
 
-const PendingApprovals = ({ isOpen, onClose, onApprovalComplete }) => {
+  const PendingApprovals = ({ isOpen, onClose, onApprovalComplete }) => {
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedAdjustment, setSelectedAdjustment] = useState(null);
@@ -18,7 +18,8 @@ const PendingApprovals = ({ isOpen, onClose, onApprovalComplete }) => {
       setLoading(true);
       const response = await stockAdjustmentService.getPendingApprovals();
       if (response.success) {
-        setPendingApprovals(response.data);
+        // Handle both array and object responses (when StockAdjustment model doesn't exist)
+        setPendingApprovals(Array.isArray(response.data) ? response.data : []);
       }
     } catch (error) {
       console.error('Error loading pending approvals:', error);
@@ -248,7 +249,7 @@ const PendingApprovals = ({ isOpen, onClose, onApprovalComplete }) => {
                           </p>
                           {adjustment.notes && (
                             <p className="text-sm text-gray-600 mt-1 italic">
-                              "{adjustment.notes}"
+                              &quot;{adjustment.notes}&quot;
                             </p>
                           )}
                         </div>
