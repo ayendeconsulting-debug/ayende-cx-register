@@ -8,6 +8,8 @@
  * 
  * FIXED: Use generateIntegrationToken for proper JWT authentication
  * 
+ * FIXED: Handle missing CRM tenants gracefully (skip with warning)
+ * 
  * Location: src/jobs/crmSyncScheduler.js
  */
 
@@ -46,7 +48,7 @@ function generateIntegrationToken(tenantId) {
 async function syncCustomersFromCRM(businessId) {
   try {
     console.log(`[CRM SYNC] Starting customer sync for business ${businessId}`);
-    
+
     // Get business info
     const business = await prisma.business.findUnique({
       where: { id: businessId },
@@ -58,7 +60,7 @@ async function syncCustomersFromCRM(businessId) {
 
     if (!business || !business.externalTenantId) {
       console.log(`[CRM SYNC] Business ${businessId} not linked to CRM tenant`);
-      return { synced: 0, errors: 0 };
+      return { synced: 0, errors: 0, skipped: true };
     }
 
     // REMOVED: syncLog query - using simple timestamp tracking instead
@@ -84,6 +86,15 @@ async function syncCustomersFromCRM(businessId) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Check if this is a "Tenant not found" error - handle gracefully
+      if (response.status === 404 && errorText.includes('Tenant not found')) {
+        console.warn(`[CRM SYNC] WARNING: Tenant '${business.externalTenantId}' not found in CRM for business '${business.businessName}'`);
+        console.warn(`[CRM SYNC] This business has an invalid externalTenantId - skipping sync`);
+        console.warn(`[CRM SYNC] To fix: Either create the tenant in CRM or clear the externalTenantId in POS`);
+        return { synced: 0, errors: 0, skipped: true, reason: 'tenant_not_found' };
+      }
+      
       throw new Error(`CRM API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
@@ -182,7 +193,7 @@ async function syncCustomersFromCRM(businessId) {
 
   } catch (error) {
     console.error(`[CRM SYNC] Failed for business ${businessId}:`, error);
-    
+
     // REMOVED: syncLog.create() for failed sync - just log to console
     console.error(`[CRM SYNC] Error details:`, error.message);
 
@@ -219,12 +230,16 @@ async function runScheduledSync() {
 
     let totalSynced = 0;
     let totalErrors = 0;
+    let totalSkipped = 0;
 
     for (const business of businesses) {
       console.log(`\n[CRM SYNC] Processing: ${business.businessName}`);
       const result = await syncCustomersFromCRM(business.id);
       totalSynced += result.synced;
       totalErrors += result.errors;
+      if (result.skipped) {
+        totalSkipped++;
+      }
     }
 
     console.log('\n╔════════════════════════════════════════════╗');
@@ -232,6 +247,9 @@ async function runScheduledSync() {
     console.log('╚════════════════════════════════════════════╝');
     console.log(`[CRM SYNC] Total synced: ${totalSynced}`);
     console.log(`[CRM SYNC] Total errors: ${totalErrors}`);
+    if (totalSkipped > 0) {
+      console.log(`[CRM SYNC] Total skipped (invalid tenant): ${totalSkipped}`);
+    }
     console.log(`[CRM SYNC] Completed at ${new Date().toISOString()}\n`);
 
   } catch (error) {
