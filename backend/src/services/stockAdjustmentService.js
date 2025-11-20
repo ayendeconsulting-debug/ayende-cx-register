@@ -4,15 +4,7 @@ import { AppError } from '../middleware/errorHandler.js';
 /**
  * Stock Adjustment Service - Business logic for stock adjustments with approval workflow
  * MULTI-TENANT VERSION - All operations filtered by businessId
- * 
- * NOTE: This service requires the StockAdjustment model to be added to Prisma schema.
- * Until then, all functions will return appropriate errors or defaults.
  */
-
-// Check if StockAdjustment model exists
-const isModelAvailable = () => {
-  return prisma.stockAdjustment !== undefined;
-};
 
 // Approval Thresholds
 const APPROVAL_THRESHOLDS = {
@@ -25,10 +17,6 @@ const APPROVAL_THRESHOLDS = {
  * Format: ADJ-YYYYMMDD-XXX
  */
 const generateAdjustmentNumber = async (businessId) => {
-  if (!isModelAvailable()) {
-    return `ADJ-${Date.now()}-001`;
-  }
-
   const today = new Date();
   const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
 
@@ -68,10 +56,6 @@ const requiresApproval = (quantityChange, totalValue) => {
  * Create a stock adjustment
  */
 export const createStockAdjustment = async (businessId, userId, adjustmentData) => {
-  if (!isModelAvailable()) {
-    throw new AppError('Stock adjustment feature is not yet available. Please add StockAdjustment model to Prisma schema.', 501);
-  }
-
   const {
     productId,
     adjustmentType,
@@ -188,10 +172,6 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
  * Apply stock adjustment to product inventory
  */
 const applyStockAdjustment = async (adjustmentId) => {
-  if (!isModelAvailable()) {
-    return;
-  }
-
   const adjustment = await prisma.stockAdjustment.findUnique({
     where: { id: adjustmentId },
     include: {
@@ -211,26 +191,24 @@ const applyStockAdjustment = async (adjustmentId) => {
     },
   });
 
-  // Create movement history record if model exists
-  if (prisma.stockMovementHistory) {
-    await prisma.stockMovementHistory.create({
-      data: {
-        movementType: 'ADJUSTMENT',
-        referenceId: adjustment.id,
-        referenceType: 'STOCK_ADJUSTMENT',
-        productId: adjustment.productId,
-        adjustmentId: adjustment.id,
-        quantityBefore: adjustment.quantityBefore,
-        quantityChange: adjustment.quantityChange,
-        quantityAfter: adjustment.quantityAfter,
-        unitCost: adjustment.unitCost,
-        totalValue: adjustment.totalValue,
-        reason: adjustment.reason,
-        notes: adjustment.notes,
-        performedBy: adjustment.createdBy,
-      },
-    });
-  }
+  // Create movement history record
+  await prisma.stockMovementHistory.create({
+    data: {
+      movementType: 'ADJUSTMENT',
+      referenceId: adjustment.id,
+      referenceType: 'STOCK_ADJUSTMENT',
+      productId: adjustment.productId,
+      adjustmentId: adjustment.id,
+      quantityBefore: adjustment.quantityBefore,
+      quantityChange: adjustment.quantityChange,
+      quantityAfter: adjustment.quantityAfter,
+      unitCost: adjustment.unitCost,
+      totalValue: adjustment.totalValue,
+      reason: adjustment.reason,
+      notes: adjustment.notes,
+      performedBy: adjustment.createdBy,
+    },
+  });
 
   // Update adjustment processed timestamp
   await prisma.stockAdjustment.update({
@@ -245,10 +223,6 @@ const applyStockAdjustment = async (adjustmentId) => {
  * Approve a stock adjustment (SUPER_ADMIN only)
  */
 export const approveStockAdjustment = async (businessId, adjustmentId, userId, approvalNotes) => {
-  if (!isModelAvailable()) {
-    throw new AppError('Stock adjustment feature is not yet available. Please add StockAdjustment model to Prisma schema.', 501);
-  }
-
   // Verify user is SUPER_ADMIN
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -330,18 +304,16 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
   });
 
   // Update approval record
-  if (prisma.stockAdjustmentApproval) {
-    await prisma.stockAdjustmentApproval.update({
-      where: { adjustmentId },
-      data: {
-        status: 'APPROVED',
-        decision: 'APPROVED',
-        approvedBy: userId,
-        approvalNotes,
-        reviewedAt: new Date(),
-      },
-    });
-  }
+  await prisma.stockAdjustmentApproval.update({
+    where: { adjustmentId },
+    data: {
+      status: 'APPROVED',
+      decision: 'APPROVED',
+      approvedBy: userId,
+      approvalNotes,
+      reviewedAt: new Date(),
+    },
+  });
 
   // Apply the adjustment
   await applyStockAdjustment(adjustmentId);
@@ -353,10 +325,6 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
  * Reject a stock adjustment (SUPER_ADMIN only)
  */
 export const rejectStockAdjustment = async (businessId, adjustmentId, userId, rejectionReason) => {
-  if (!isModelAvailable()) {
-    throw new AppError('Stock adjustment feature is not yet available. Please add StockAdjustment model to Prisma schema.', 501);
-  }
-
   // Verify user is SUPER_ADMIN
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -425,18 +393,16 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
   });
 
   // Update approval record
-  if (prisma.stockAdjustmentApproval) {
-    await prisma.stockAdjustmentApproval.update({
-      where: { adjustmentId },
-      data: {
-        status: 'REJECTED',
-        decision: 'REJECTED',
-        approvedBy: userId,
-        rejectionReason,
-        reviewedAt: new Date(),
-      },
-    });
-  }
+  await prisma.stockAdjustmentApproval.update({
+    where: { adjustmentId },
+    data: {
+      status: 'REJECTED',
+      decision: 'REJECTED',
+      approvedBy: userId,
+      rejectionReason,
+      reviewedAt: new Date(),
+    },
+  });
 
   return updatedAdjustment;
 };
@@ -445,16 +411,6 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
  * Get all stock adjustments with filters
  */
 export const getAllStockAdjustments = async (businessId, filters = {}) => {
-  if (!isModelAvailable()) {
-    return {
-      adjustments: [],
-      total: 0,
-      page: 1,
-      limit: 20,
-      totalPages: 0,
-    };
-  }
-
   const {
     page = 1,
     limit = 20,
@@ -543,10 +499,6 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
  * Get pending approvals (for SUPER_ADMIN)
  */
 export const getPendingApprovals = async (businessId) => {
-  if (!isModelAvailable()) {
-    return [];
-  }
-
   const pendingAdjustments = await prisma.stockAdjustment.findMany({
     where: {
       businessId,
@@ -585,34 +537,21 @@ export const getPendingApprovals = async (businessId) => {
  * Get count of pending approvals (for notification badge)
  */
 export const getPendingApprovalsCount = async (businessId) => {
-  if (!isModelAvailable()) {
-    return 0;
-  }
+  const count = await prisma.stockAdjustment.count({
+    where: {
+      businessId,
+      status: 'PENDING',
+      requiresApproval: true,
+    },
+  });
 
-  try {
-    const count = await prisma.stockAdjustment.count({
-      where: {
-        businessId,
-        status: 'PENDING',
-        requiresApproval: true,
-      },
-    });
-
-    return count;
-  } catch (error) {
-    console.error('Stock adjustment model not available:', error.message);
-    return 0;
-  }
+  return count;
 };
 
 /**
  * Get stock adjustment by ID
  */
 export const getStockAdjustmentById = async (businessId, adjustmentId) => {
-  if (!isModelAvailable()) {
-    throw new AppError('Stock adjustment feature is not yet available. Please add StockAdjustment model to Prisma schema.', 501);
-  }
-
   const adjustment = await prisma.stockAdjustment.findFirst({
     where: { 
       id: adjustmentId,
@@ -683,17 +622,6 @@ export const getStockMovementHistory = async (businessId, productId, filters = {
     throw new AppError('Product not found', 404);
   }
 
-  // Check if StockMovementHistory model exists
-  if (!prisma.stockMovementHistory) {
-    return {
-      movements: [],
-      total: 0,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalPages: 0,
-    };
-  }
-
   const where = { productId };
 
   if (startDate || endDate) {
@@ -748,10 +676,6 @@ export const getStockMovementHistory = async (businessId, productId, filters = {
  * Cancel a pending adjustment (creator only)
  */
 export const cancelStockAdjustment = async (businessId, adjustmentId, userId) => {
-  if (!isModelAvailable()) {
-    throw new AppError('Stock adjustment feature is not yet available. Please add StockAdjustment model to Prisma schema.', 501);
-  }
-
   const adjustment = await prisma.stockAdjustment.findFirst({
     where: {
       id: adjustmentId,

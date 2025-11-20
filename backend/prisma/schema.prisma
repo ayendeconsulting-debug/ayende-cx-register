@@ -8,27 +8,27 @@ datasource db {
 }
 
 model User {
-  id                                                   String                       @id @default(uuid())
-  email                                                String
-  username                                             String
-  passwordHash                                         String
-  firstName                                            String
-  lastName                                             String
-  role                                                 UserRole                     @default(CASHIER)
-  isActive                                             Boolean                      @default(true)
-  lastLogin                                            DateTime?
-  createdAt                                            DateTime                     @default(now())
-  updatedAt                                            DateTime                     @updatedAt
-  businessId                                           String
-  auditLogs                                            AuditLog[]
-  shifts                                               Shift[]
-  transactions                                         Transaction[]
-  business                                             Business                     @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  UserInvitation                                       UserInvitation[]
-  stock_adjustment_approvals                           stock_adjustment_approvals[]
-  stock_adjustments_stock_adjustments_approvedByToUser stock_adjustments[]          @relation("stock_adjustments_approvedByToUser")
-  stock_adjustments_stock_adjustments_createdByToUser  stock_adjustments[]          @relation("stock_adjustments_createdByToUser")
-  stock_movement_history                               stock_movement_history[]
+  id                    String                    @id @default(uuid())
+  email                 String
+  username              String
+  passwordHash          String
+  firstName             String
+  lastName              String
+  role                  UserRole                  @default(CASHIER)
+  isActive              Boolean                   @default(true)
+  lastLogin             DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  businessId            String
+  auditLogs             AuditLog[]
+  shifts                Shift[]
+  transactions          Transaction[]
+  business              Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  UserInvitation        UserInvitation[]
+  approvedAdjustments   StockAdjustment[]         @relation("ApprovedBy")
+  createdAdjustments    StockAdjustment[]         @relation("CreatedBy")
+  adjustmentApprovals   StockAdjustmentApproval[]
+  stockMovements        StockMovementHistory[]
 
   @@unique([businessId, email])
   @@unique([businessId, username])
@@ -83,8 +83,8 @@ model Business {
   transactions           Transaction[]
   users                  User[]
   UserInvitation         UserInvitation[]
-  stock_adjustments      stock_adjustments[]
-  sync_logs              sync_logs[]
+  stockAdjustments       StockAdjustment[]
+  syncLogs               SyncLog[]
 
   @@index([businessName])
   @@index([externalTenantId])
@@ -161,32 +161,32 @@ model Category {
 }
 
 model Product {
-  id                     String                   @id @default(uuid())
-  sku                    String
-  name                   String
-  description            String?
-  categoryId             String
-  price                  Decimal                  @db.Decimal(10, 2)
-  costPrice              Decimal?                 @db.Decimal(10, 2)
-  stockQuantity          Int                      @default(0)
-  lowStockAlert          Int                      @default(10)
-  unit                   String                   @default("unit")
-  barcode                String?
-  imageUrl               String?
-  isActive               Boolean                  @default(true)
-  isTaxable              Boolean                  @default(true)
-  loyaltyPoints          Int                      @default(0)
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  businessId             String
-  currency               String                   @default("$")
-  currencyCode           String                   @default("USD")
-  business               Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  category               Category                 @relation(fields: [categoryId], references: [id])
-  stockMovements         StockMovement[]
-  transactionItems       TransactionItem[]
-  stock_adjustments      stock_adjustments[]
-  stock_movement_history stock_movement_history[]
+  id               String                 @id @default(uuid())
+  sku              String
+  name             String
+  description      String?
+  categoryId       String
+  price            Decimal                @db.Decimal(10, 2)
+  costPrice        Decimal?               @db.Decimal(10, 2)
+  stockQuantity    Int                    @default(0)
+  lowStockAlert    Int                    @default(10)
+  unit             String                 @default("unit")
+  barcode          String?
+  imageUrl         String?
+  isActive         Boolean                @default(true)
+  isTaxable        Boolean                @default(true)
+  loyaltyPoints    Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  businessId       String
+  currency         String                 @default("$")
+  currencyCode     String                 @default("USD")
+  business         Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category         Category               @relation(fields: [categoryId], references: [id])
+  stockMovements   StockMovement[]
+  transactionItems TransactionItem[]
+  adjustments      StockAdjustment[]
+  movementHistory  StockMovementHistory[]
 
   @@unique([businessId, barcode])
   @@unique([businessId, sku])
@@ -225,8 +225,8 @@ model Transaction {
   syncedToCRM           Boolean           @default(false)
   syncStatus            SyncStatus?       @default(PENDING)
   syncedToCrm           Boolean?          @default(false)
-  syncError             String?           // ← ADD THIS LINE
-  lastSyncedAt          DateTime?         // ← ADD THIS LINE
+  syncError             String?
+  lastSyncedAt          DateTime?
   StockMovement         StockMovement[]
   business              Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customer              Customer?         @relation(fields: [customerId], references: [id])
@@ -396,32 +396,32 @@ model UserInvitation {
   @@index([invitationToken])
 }
 
-model stock_adjustments {
-  id                                      String                      @id @default(uuid())
-  adjustmentNumber                        String
-  productId                               String
-  adjustmentType                          AdjustmentType
-  quantityBefore                          Int
-  quantityChange                          Int
-  quantityAfter                           Int
-  unitCost                                Decimal                     @db.Decimal(10, 2)
-  totalValue                              Decimal                     @db.Decimal(10, 2)
-  reason                                  AdjustmentReason
-  customReason                            String?
-  notes                                   String?
-  status                                  AdjustmentStatus            @default(PENDING)
-  requiresApproval                        Boolean                     @default(false)
-  createdBy                               String
-  approvedBy                              String?
-  createdAt                               DateTime                    @default(now())
-  processedAt                             DateTime?
-  businessId                              String
-  stock_adjustment_approvals              stock_adjustment_approvals?
-  User_stock_adjustments_approvedByToUser User?                       @relation("stock_adjustments_approvedByToUser", fields: [approvedBy], references: [id])
-  business                                Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  User_stock_adjustments_createdByToUser  User                        @relation("stock_adjustments_createdByToUser", fields: [createdBy], references: [id])
-  Product                                 Product                     @relation(fields: [productId], references: [id])
-  stock_movement_history                  stock_movement_history?
+model StockAdjustment {
+  id               String                   @id @default(uuid())
+  adjustmentNumber String
+  productId        String
+  adjustmentType   AdjustmentType
+  quantityBefore   Int
+  quantityChange   Int
+  quantityAfter    Int
+  unitCost         Decimal                  @db.Decimal(10, 2)
+  totalValue       Decimal                  @db.Decimal(10, 2)
+  reason           AdjustmentReason
+  customReason     String?
+  notes            String?
+  status           AdjustmentStatus         @default(PENDING)
+  requiresApproval Boolean                  @default(false)
+  createdBy        String
+  approvedBy       String?
+  createdAt        DateTime                 @default(now())
+  processedAt      DateTime?
+  businessId       String
+  approval         StockAdjustmentApproval?
+  approver         User?                    @relation("ApprovedBy", fields: [approvedBy], references: [id])
+  business         Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  creator          User                     @relation("CreatedBy", fields: [createdBy], references: [id])
+  product          Product                  @relation(fields: [productId], references: [id])
+  movementHistory  StockMovementHistory?
 
   @@unique([businessId, adjustmentNumber])
   @@index([businessId])
@@ -429,49 +429,52 @@ model stock_adjustments {
   @@index([createdBy])
   @@index([status])
   @@index([createdAt])
+  @@map("stock_adjustments")
 }
 
-model stock_adjustment_approvals {
-  id                String            @id @default(uuid())
-  adjustmentId      String            @unique
-  status            ApprovalStatus    @default(PENDING)
-  approvedBy        String?
-  decision          String?
-  rejectionReason   String?
-  approvalNotes     String?
-  submittedAt       DateTime          @default(now())
-  reviewedAt        DateTime?
-  stock_adjustments stock_adjustments @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
-  User              User?             @relation(fields: [approvedBy], references: [id])
+model StockAdjustmentApproval {
+  id              String          @id @default(uuid())
+  adjustmentId    String          @unique
+  status          ApprovalStatus  @default(PENDING)
+  approvedBy      String?
+  decision        String?
+  rejectionReason String?
+  approvalNotes   String?
+  submittedAt     DateTime        @default(now())
+  reviewedAt      DateTime?
+  adjustment      StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  approver        User?           @relation(fields: [approvedBy], references: [id])
 
   @@index([status])
   @@index([submittedAt])
+  @@map("stock_adjustment_approvals")
 }
 
-model stock_movement_history {
-  id                String                 @id @default(uuid())
-  movementType      AdjustmentMovementType
-  referenceId       String
-  referenceType     String
-  productId         String
-  adjustmentId      String?                @unique
-  quantityBefore    Int
-  quantityChange    Int
-  quantityAfter     Int
-  unitCost          Decimal                @db.Decimal(10, 2)
-  totalValue        Decimal                @db.Decimal(10, 2)
-  reason            String
-  notes             String?
-  performedBy       String
-  createdAt         DateTime               @default(now())
-  stock_adjustments stock_adjustments?     @relation(fields: [adjustmentId], references: [id])
-  User              User                   @relation(fields: [performedBy], references: [id])
-  Product           Product                @relation(fields: [productId], references: [id])
+model StockMovementHistory {
+  id             String                 @id @default(uuid())
+  movementType   AdjustmentMovementType
+  referenceId    String
+  referenceType  String
+  productId      String
+  adjustmentId   String?                @unique
+  quantityBefore Int
+  quantityChange Int
+  quantityAfter  Int
+  unitCost       Decimal                @db.Decimal(10, 2)
+  totalValue     Decimal                @db.Decimal(10, 2)
+  reason         String
+  notes          String?
+  performedBy    String
+  createdAt      DateTime               @default(now())
+  adjustment     StockAdjustment?       @relation(fields: [adjustmentId], references: [id])
+  performer      User                   @relation(fields: [performedBy], references: [id])
+  product        Product                @relation(fields: [productId], references: [id])
 
   @@index([productId])
   @@index([performedBy])
   @@index([createdAt])
   @@index([movementType])
+  @@map("stock_movement_history")
 }
 
 model SystemMapping {
@@ -493,7 +496,7 @@ model SystemMapping {
   @@index([entityType, syncStatus])
 }
 
-model sync_logs {
+model SyncLog {
   id           String     @id @default(uuid())
   businessId   String
   operation    String
@@ -514,6 +517,7 @@ model sync_logs {
   @@index([status])
   @@index([createdAt])
   @@index([entityType, entityId])
+  @@map("sync_logs")
 }
 
 model SyncQueue {
