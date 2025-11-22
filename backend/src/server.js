@@ -21,6 +21,8 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
 import businessRoutes from './routes/businessRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import businessSettingsRoutes from './routes/businessSettingsRoutes.js';
 
 // ============================================
 // SHIFT & STOCK MANAGEMENT ROUTES
@@ -243,6 +245,8 @@ app.use(`/api/${API_VERSION}/categories`, categoryRoutes);
 app.use(`/api/${API_VERSION}/transactions`, transactionRoutes);
 app.use(`/api/${API_VERSION}/customers`, customerRoutes);
 app.use(`/api/${API_VERSION}/businesses`, businessRoutes);
+app.use(`/api/${API_VERSION}/users`, userRoutes);
+app.use(`/api/${API_VERSION}/business-settings`, businessSettingsRoutes);
 
 // Shift and stock management routes
 app.use(`/api/${API_VERSION}/shifts`, shiftRoutes);
