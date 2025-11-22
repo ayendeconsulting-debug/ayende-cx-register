@@ -19,6 +19,8 @@ import Reports from "./pages/Reports";
 import BusinessRegistration from './pages/BusinessRegistration';
 import AcceptInvitation from './pages/AcceptInvitation';
 import ManageInvitations from './pages/ManageInvitations';
+import UserManagement from './pages/UserManagement';
+import BusinessSettings from './pages/BusinessSettings';
 
 
 function App() {
@@ -48,6 +50,8 @@ function App() {
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/team/invitations" element={<ManageInvitations />} />
+              <Route path="/team/users" element={<UserManagement />} />
+              <Route path="/settings/business" element={<BusinessSettings />} />
             </Route>
 
             {/* Default redirect */}

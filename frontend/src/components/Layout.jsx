@@ -9,7 +9,9 @@ import {
   Mail,
   LogOut,
   Menu,
-  X
+  X,
+  UserCog,      // Add this
+  Settings      // Add this
 } from 'lucide-react';
 import { logout } from '../store/slices/authSlice';
 import { useState } from 'react';
@@ -34,14 +36,26 @@ const Layout = () => {
     { path: '/transactions', icon: Receipt, label: 'Transactions' },
   ];
 
-  // Add Team Invitations link for ADMIN and SUPER_ADMIN only
+  // Add Admin-only navigation items
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   if (isAdmin) {
-    navItems.push({ 
-      path: '/team/invitations', 
-      icon: Mail, 
-      label: 'Team Invitations' 
-    });
+    navItems.push(
+      {
+        path: '/team/invitations',
+        icon: Mail,
+        label: 'Team Invitations'
+      },
+      {
+        path: '/team/users',
+        icon: UserCog,
+        label: 'User Management'
+      },
+      {
+        path: '/settings/business',
+        icon: Settings,
+        label: 'Business Settings'
+      }
+    );
   }
 
   const isActive = (path) => location.pathname === path;
