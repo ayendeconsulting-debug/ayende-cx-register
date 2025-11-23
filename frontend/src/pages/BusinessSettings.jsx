@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTheme } from '../context/ThemeContext';
 import { 
   Building2, 
   Palette, 
@@ -19,6 +20,7 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 const BusinessSettings = () => {
+  const { updateTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -115,6 +117,12 @@ const BusinessSettings = () => {
         ...prev,
         ...response.data.data,
       }));
+      // Update theme globally
+      updateTheme({
+        primaryColor: response.data.data.primaryColor,
+        secondaryColor: response.data.data.secondaryColor,
+        logoUrl: response.data.data.logoUrl,
+      });
 
       setSuccessMessage('Theme updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);

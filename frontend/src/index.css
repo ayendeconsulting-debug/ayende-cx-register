@@ -1,6 +1,26 @@
+﻿:root {
+  --color-primary: #3B82F6;
+  --color-primary-light: #60A5FA;
+  --color-primary-dark: #2563EB;
+  --color-secondary: #10B981;
+  --color-secondary-light: #34D399;
+  --color-secondary-dark: #059669;
+}
+:root {
+  --color-primary: #3B82F6;
+  --color-primary-light: #60A5FA;
+  --color-primary-dark: #2563EB;
+  --color-secondary: #10B981;
+  --color-secondary-light: #34D399;
+  --color-secondary-dark: #059669;
+}
+
+/* Rest of your existing CSS below */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -47,3 +67,4 @@ body {
 .card {
   @apply bg-white rounded-lg shadow-md p-6;
 }
+

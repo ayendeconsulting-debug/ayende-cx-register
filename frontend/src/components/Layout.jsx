@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+﻿import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { 
   BarChart3,
@@ -66,7 +66,7 @@ const Layout = () => {
       <aside className="hidden md:flex md:flex-col w-64 bg-white shadow-lg">
         {/* Logo/Brand */}
         <div className="p-6 border-b">
-          <h1 className="text-2xl font-bold text-blue-600">Ayende-CX</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>Ayende-CX</h1>
           <p className="text-sm text-gray-600">POS System</p>
         </div>
 
@@ -80,9 +80,10 @@ const Layout = () => {
                 to={item.path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   isActive(item.path)
-                    ? 'bg-blue-600 text-white'
+                    ? 'text-white'
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
+                style={isActive(item.path) ? { backgroundColor: 'var(--color-primary)' } : {}}
               >
                 <Icon className="w-5 h-5" />
                 <span className="font-medium">{item.label}</span>
