@@ -8,6 +8,7 @@ import { Provider } from "react-redux";
 import { Toaster } from "react-hot-toast";
 import store from "./store/store";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -49,9 +50,9 @@ function App() {
               <Route path="/customers" element={<Customers />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/reports" element={<Reports />} />
-              <Route path="/team/invitations" element={<ManageInvitations />} />
-              <Route path="/team/users" element={<UserManagement />} />
-              <Route path="/settings/business" element={<BusinessSettings />} />
+              <Route path="/team/invitations" element={<AdminRoute><ManageInvitations /></AdminRoute>} />
+              <Route path="/team/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+              <Route path="/settings/business" element={<AdminRoute><BusinessSettings /></AdminRoute>} />
             </Route>
 
             {/* Default redirect */}
