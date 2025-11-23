@@ -62,7 +62,7 @@ const BusinessSettings = () => {
   const fetchBusinessSettings = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       
       const response = await axios.get(`${API_BASE_URL}/business-settings`, {
         headers: {
@@ -99,7 +99,7 @@ const BusinessSettings = () => {
     
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       const response = await axios.patch(
         `${API_BASE_URL}/business-settings/theme`,
@@ -140,7 +140,7 @@ const BusinessSettings = () => {
     
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       const updateData = {
         businessName: settings.businessName,
@@ -182,7 +182,7 @@ const BusinessSettings = () => {
     
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       const updateData = {
         taxEnabled: settings.taxEnabled,

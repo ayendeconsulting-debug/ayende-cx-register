@@ -29,7 +29,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       
       const response = await axios.get(`${API_BASE_URL}/users`, {
         headers: {
@@ -50,7 +50,7 @@ const UserManagement = () => {
   const toggleUserStatus = async (userId, currentStatus) => {
     try {
       setActionLoading(userId);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       const response = await axios.patch(
         `${API_BASE_URL}/users/${userId}/status`,
