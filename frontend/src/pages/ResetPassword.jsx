@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Store, Lock, Eye, EyeOff, CheckCircle, XCircle, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import apiClient from '../config/apiClient';
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
@@ -65,7 +65,7 @@ const ResetPassword = () => {
     setError('');
 
     try {
-      const response = await api.post('/auth/reset-password', {
+      const response = await apiClient.post('/auth/reset-password', {
         token,
         email,
         newPassword,

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Store, Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import apiClient from '../config/apiClient';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -21,7 +21,7 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/forgot-password', {
+      const response = await apiClient.post('/auth/forgot-password', {
         email,
         subdomain: subdomain || undefined,
       });
