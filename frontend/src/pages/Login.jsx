@@ -89,6 +89,16 @@ const Login = () => {
             />
           </div>
 
+          {/* Forgot Password Link */}
+          <div className="flex justify-end">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -115,32 +125,31 @@ const Login = () => {
         </form>
 
         {/* Registration Footer */}
-<div className="mt-6 pt-6 border-t border-gray-200">
-  <div className="text-center space-y-3">
-    <p className="text-sm text-gray-600">
-      New to Ayende POS?
-    </p>
-    <Link 
-      to="/register" 
-      className="block w-full px-6 py-3 border-2 border-indigo-600 text-indigo-600 rounded-lg font-medium hover:bg-indigo-50 transition-all"
-    >
-      Register Your Business
-    </Link>
-    
-    <div className="text-center pt-2">
-      <p className="text-xs text-gray-500">
-        Need help?{' '}
-        <a 
-          href="mailto:support@ayendecx.com" 
-          className="text-indigo-600 hover:text-indigo-500 font-medium"
-        >
-          Contact Support
-        </a>
-      </p>
-    </div>
-  </div>
-</div>
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="text-center space-y-3">
+            <p className="text-sm text-gray-600">
+              New to Ayende POS?
+            </p>
+            <Link
+              to="/register"
+              className="block w-full px-6 py-3 border-2 border-indigo-600 text-indigo-600 rounded-lg font-medium hover:bg-indigo-50 transition-all"
+            >
+              Register Your Business
+            </Link>
 
+            <div className="text-center pt-2">
+              <p className="text-xs text-gray-500">
+                Need help?{' '}
+                <a
+                  href="mailto:support@ayendecx.com"
+                  className="text-indigo-600 hover:text-indigo-500 font-medium"
+                >
+                  Contact Support
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
