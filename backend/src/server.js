@@ -31,6 +31,11 @@ import shiftRoutes from './routes/shiftRoutes.js';
 import stockAdjustmentRoutes from './routes/stockAdjustmentRoutes.js';
 
 // ============================================
+// BULK UPLOAD ROUTES
+// ============================================
+import bulkUploadRoutes from './routes/bulkUploadRoutes.js';
+
+// ============================================
 // REGISTRATION & INVITATION ROUTES
 // ============================================
 import registrationRoutes from './routes/registration.routes.js';
@@ -251,6 +256,7 @@ app.use(`/api/${API_VERSION}/business-settings`, businessSettingsRoutes);
 // Shift and stock management routes
 app.use(`/api/${API_VERSION}/shifts`, shiftRoutes);
 app.use(`/api/${API_VERSION}/stock-adjustments`, stockAdjustmentRoutes);
+app.use(`/api/${API_VERSION}/bulk-upload`, bulkUploadRoutes);
 
 // Registration and invitation routes
 app.use(`/api/${API_VERSION}/registration`, registrationRoutes);
@@ -484,3 +490,5 @@ process.on('unhandledRejection', (err) => {
 });
 
 export default app;
+
+
