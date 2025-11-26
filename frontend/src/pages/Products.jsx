@@ -15,10 +15,12 @@ import {
   Scan,
   TrendingUp,
   History,
+  Upload,
 } from 'lucide-react';
 import QuickActions from '../components/QuickActions';
 import StockAdjustmentForm from '../components/StockAdjustmentForm';
 import StockMovementHistory from '../components/StockMovementHistory';
+import BulkUploadModal from '../components/BulkUploadModal';
 
 const Products = () => {
   const { user } = useSelector((state) => state.auth);
@@ -31,6 +33,7 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   
   // Stock adjustment state
   const [showAdjustmentForm, setShowAdjustmentForm] = useState(false);
@@ -350,6 +353,13 @@ const Products = () => {
             >
               <Filter className="w-5 h-5 mr-2" />
               Manage Categories
+            </button>
+            <button
+              onClick={() => setShowBulkUpload(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+            >
+              <Upload className="w-5 h-5 mr-2" />
+              Bulk Upload
             </button>
             <button 
               onClick={() => {
@@ -935,7 +945,13 @@ const Products = () => {
       )}
 
       <QuickActions />
-      
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        isOpen={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        type="products"
+        onSuccess={loadProducts}
+      />
       </div>
   );
 };
