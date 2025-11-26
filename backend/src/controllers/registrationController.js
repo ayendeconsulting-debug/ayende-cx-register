@@ -3,11 +3,25 @@ import { successResponse, createdResponse } from '../utils/response.js';
 import { hashPassword } from '../utils/auth.js';
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { sendWelcomeEmail } from '../services/emailService.js';
 
 /**
  * Business Registration Controller
  * Handles new business registration with owner account creation
  */
+
+/**
+ * Generate a URL-friendly subdomain from business name
+ * @param {string} businessName - The business name
+ * @returns {string} URL-friendly subdomain
+ */
+const generateSubdomain = (businessName) => {
+  return businessName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+    .replace(/\s+/g, '') // Remove spaces
+    .substring(0, 20); // Limit length
+};
 
 /**
  * @route   POST /api/v1/registration/business
@@ -49,6 +63,11 @@ export const registerBusiness = asyncHandler(async (req, res) => {
     throw new AppError('Please provide all required fields', 400);
   }
 
+  // Validate password length
+  if (ownerPassword.length < 6) {
+    throw new AppError('Password must be at least 6 characters', 400);
+  }
+
   // Check if business email already exists
   const existingBusiness = await prisma.business.findFirst({
     where: { businessEmail }
@@ -76,6 +95,23 @@ export const registerBusiness = asyncHandler(async (req, res) => {
     throw new AppError('Email already registered', 400);
   }
 
+  // Generate subdomain from business name
+  let subdomain = generateSubdomain(businessName);
+  
+  // Check if subdomain exists and make it unique if needed
+  let subdomainExists = await prisma.business.findUnique({
+    where: { subdomain }
+  });
+
+  let counter = 1;
+  while (subdomainExists) {
+    subdomain = `${generateSubdomain(businessName)}${counter}`;
+    subdomainExists = await prisma.business.findUnique({
+      where: { subdomain }
+    });
+    counter++;
+  }
+
   // Create business and owner account in a transaction
   const result = await prisma.$transaction(async (tx) => {
     // 1. Create Business
@@ -89,6 +125,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
         businessState: businessState || null,
         businessZipCode: businessZipCode || null,
         businessCountry: businessCountry || 'US',
+        subdomain, // Auto-generated subdomain
         externalTenantId: externalTenantId || null,
         currency,
         currencyCode,
@@ -147,10 +184,46 @@ export const registerBusiness = asyncHandler(async (req, res) => {
       });
     }
 
+    // 4. Create Audit Log for registration
+    await tx.auditLog.create({
+      data: {
+        userId: owner.id,
+        action: 'CREATE',
+        entityType: 'Business',
+        entityId: business.id,
+        changes: JSON.stringify({
+          action: 'Business Registration',
+          businessName: business.businessName,
+          subdomain: business.subdomain,
+        }),
+      },
+    });
+
     return { business, owner };
   });
 
-  // Send success response NEW
+  // Send welcome email (don't block registration if email fails)
+  const frontendUrl = process.env.FRONTEND_URL || 'https://pos-app.ayendecx.com';
+  const loginUrl = `${frontendUrl}/login`;
+
+  try {
+    await sendWelcomeEmail({
+      email: result.owner.email,
+      firstName: result.owner.firstName,
+      lastName: result.owner.lastName,
+      businessName: result.business.businessName,
+      username: result.owner.username,
+      temporaryPassword: null, // User set their own password
+      loginUrl,
+      subdomain: result.business.subdomain,
+    });
+    console.log(`[REGISTRATION] Welcome email sent to ${result.owner.email}`);
+  } catch (emailError) {
+    console.error('[REGISTRATION] Failed to send welcome email:', emailError.message);
+    // Don't throw - registration should still succeed
+  }
+
+  // Send success response
   return createdResponse(
     res,
     {
@@ -158,21 +231,26 @@ export const registerBusiness = asyncHandler(async (req, res) => {
         id: result.business.id,
         name: result.business.businessName,
         email: result.business.businessEmail,
+        subdomain: result.business.subdomain,
         externalTenantId: result.business.externalTenantId,
       },
       owner: result.owner,
+      loginInfo: {
+        username: `${result.owner.username}.${result.business.subdomain}`,
+        loginUrl,
+      },
     },
-    'Business registered successfully! You can now login with your credentials.'
+    'Business registered successfully! A welcome email has been sent with your login details.'
   );
 });
 
 /**
  * @route   POST /api/v1/registration/check-availability
- * @desc    Check if username or email is available
+ * @desc    Check if username, email, or subdomain is available
  * @access  Public
  */
 export const checkAvailability = asyncHandler(async (req, res) => {
-  const { username, email, businessEmail } = req.body;
+  const { username, email, businessEmail, subdomain } = req.body;
 
   const checks = {};
 
@@ -203,6 +281,16 @@ export const checkAvailability = asyncHandler(async (req, res) => {
     checks.businessEmail = {
       available: !businessExists,
       message: businessExists ? 'Business email already registered' : 'Business email available',
+    };
+  }
+
+  if (subdomain) {
+    const subdomainExists = await prisma.business.findUnique({
+      where: { subdomain: subdomain.toLowerCase() },
+    });
+    checks.subdomain = {
+      available: !subdomainExists,
+      message: subdomainExists ? 'Subdomain already taken' : 'Subdomain available',
     };
   }
 

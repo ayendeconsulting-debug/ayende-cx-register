@@ -6,6 +6,9 @@ import {
   refreshAccessToken,
   getCurrentUser,
   logout,
+  forgotPassword,
+  resetPassword,
+  changePassword,
 } from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validator.js';
@@ -34,11 +37,37 @@ const refreshValidation = [
   body('refreshToken').notEmpty().withMessage('Refresh token is required'),
 ];
 
-// Routes
+const forgotPasswordValidation = [
+  body('email').isEmail().withMessage('Valid email is required'),
+];
+
+const resetPasswordValidation = [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters'),
+];
+
+const changePasswordValidation = [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters'),
+];
+
+// Public Routes
 router.post('/register', registerValidation, validate, register);
 router.post('/login', loginValidation, validate, login);
 router.post('/refresh', refreshValidation, validate, refreshAccessToken);
+
+// Password Reset Routes (Public)
+router.post('/forgot-password', forgotPasswordValidation, validate, forgotPassword);
+router.post('/reset-password', resetPasswordValidation, validate, resetPassword);
+
+// Protected Routes
 router.get('/me', authenticate, getCurrentUser);
 router.post('/logout', authenticate, logout);
+router.post('/change-password', authenticate, changePasswordValidation, validate, changePassword);
 
 export default router;

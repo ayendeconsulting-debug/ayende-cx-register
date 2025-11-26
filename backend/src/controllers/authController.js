@@ -1,4 +1,5 @@
 import prisma from '../config/database.js';
+import crypto from 'crypto';
 import {
   hashPassword,
   comparePassword,
@@ -9,6 +10,7 @@ import {
 } from '../utils/auth.js';
 import { successResponse, errorResponse, createdResponse } from '../utils/response.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { sendPasswordResetEmail } from '../services/emailService.js';
 
 /**
  * @route   POST /api/v1/auth/register
@@ -124,8 +126,8 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   // Find user - supports both simple username and multi-tenant format
-  console.log('[USER LOOKUP]', { 
-    actualUsername, 
+  console.log('[USER LOOKUP]', {
+    actualUsername,
     businessId: business?.id || 'ANY',
     businessName: business?.businessName || 'ANY'
   });
@@ -155,7 +157,7 @@ export const login = asyncHandler(async (req, res) => {
 
   // Verify password
   const isPasswordValid = await comparePassword(password, user.passwordHash);
-  console.log('[PASSWORD CHECK]', isPasswordValid ? 'Valid ✅' : 'Invalid ❌');
+  console.log('[PASSWORD CHECK]', isPasswordValid ? 'Valid' : 'Invalid');
 
   if (!isPasswordValid) {
     console.log('[LOGIN FAILED] Invalid password');
@@ -201,6 +203,7 @@ export const login = asyncHandler(async (req, res) => {
     business: {
       id: user.business.id,
       name: user.business.businessName,
+      subdomain: user.business.subdomain,
       currency: user.business.currency,
       currencyCode: user.business.currencyCode,
       taxRate: user.business.taxRate,
@@ -237,6 +240,7 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
       lastName: true,
       role: true,
       isActive: true,
+      businessId: true,
     },
   });
 
@@ -245,7 +249,10 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 
   // Generate new tokens
-  const payload = generateUserPayload(user);
+  const payload = {
+    ...generateUserPayload(user),
+    businessId: user.businessId
+  };
   const newAccessToken = generateAccessToken(payload);
   const newRefreshToken = generateRefreshToken(payload);
 
@@ -274,12 +281,11 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
       isActive: true,
       lastLogin: true,
       createdAt: true,
-    },
-    include: {
       business: {
         select: {
           id: true,
           businessName: true,
+          subdomain: true,
           currency: true,
           currencyCode: true,
           taxRate: true,
@@ -287,7 +293,7 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
           timezone: true,
         }
       }
-    }
+    },
   });
 
   return successResponse(res, user, 'User retrieved successfully');
@@ -310,4 +316,217 @@ export const logout = asyncHandler(async (req, res) => {
   });
 
   return successResponse(res, null, 'Logged out successfully');
+});
+
+/**
+ * @route   POST /api/v1/auth/forgot-password
+ * @desc    Request password reset email
+ * @access  Public
+ */
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email, subdomain } = req.body;
+
+  if (!email) {
+    return errorResponse(res, 'Email is required', 400);
+  }
+
+  // Build query - if subdomain provided, find user in that business
+  let whereClause = { email };
+  
+  if (subdomain) {
+    const business = await prisma.business.findUnique({
+      where: { subdomain }
+    });
+
+    if (!business) {
+      // Don't reveal if business exists or not for security
+      return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
+    }
+
+    whereClause = {
+      email,
+      businessId: business.id
+    };
+  }
+
+  // Find user
+  const user = await prisma.user.findFirst({
+    where: whereClause,
+    include: {
+      business: true
+    }
+  });
+
+  // Always return success to prevent email enumeration
+  if (!user) {
+    console.log('[PASSWORD RESET] User not found:', email);
+    return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
+  }
+
+  if (!user.isActive) {
+    console.log('[PASSWORD RESET] User inactive:', email);
+    return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
+  }
+
+  // Generate reset token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+  const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  // Save token to database
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordResetToken: hashedToken,
+      passwordResetExpires: resetExpires,
+    },
+  });
+
+  // Build reset URL
+  const frontendUrl = process.env.FRONTEND_URL || 'https://pos-app.ayendecx.com';
+  const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+  // Send email
+  try {
+    await sendPasswordResetEmail({
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      businessName: user.business.businessName,
+      resetUrl,
+      expiresIn: '1 hour',
+    });
+
+    console.log('[PASSWORD RESET] Email sent to:', email);
+  } catch (error) {
+    console.error('[PASSWORD RESET] Failed to send email:', error);
+    // Clear token if email fails
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+    return errorResponse(res, 'Failed to send password reset email. Please try again.', 500);
+  }
+
+  return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
+});
+
+/**
+ * @route   POST /api/v1/auth/reset-password
+ * @desc    Reset password with token
+ * @access  Public
+ */
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { token, email, newPassword } = req.body;
+
+  if (!token || !email || !newPassword) {
+    return errorResponse(res, 'Token, email, and new password are required', 400);
+  }
+
+  if (newPassword.length < 6) {
+    return errorResponse(res, 'Password must be at least 6 characters', 400);
+  }
+
+  // Hash the token to compare with database
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+  // Find user with valid token
+  const user = await prisma.user.findFirst({
+    where: {
+      email,
+      passwordResetToken: hashedToken,
+      passwordResetExpires: {
+        gt: new Date(), // Token not expired
+      },
+    },
+  });
+
+  if (!user) {
+    console.log('[PASSWORD RESET] Invalid or expired token for:', email);
+    return errorResponse(res, 'Invalid or expired reset token', 400);
+  }
+
+  // Hash new password
+  const passwordHash = await hashPassword(newPassword);
+
+  // Update password and clear reset token
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      passwordResetToken: null,
+      passwordResetExpires: null,
+    },
+  });
+
+  // Create audit log
+  await prisma.auditLog.create({
+    data: {
+      userId: user.id,
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: user.id,
+      changes: JSON.stringify({ action: 'Password reset' }),
+    },
+  });
+
+  console.log('[PASSWORD RESET] Password updated for:', email);
+
+  return successResponse(res, null, 'Password reset successful. You can now login with your new password.');
+});
+
+/**
+ * @route   POST /api/v1/auth/change-password
+ * @desc    Change password (when logged in)
+ * @access  Private
+ */
+export const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return errorResponse(res, 'Current password and new password are required', 400);
+  }
+
+  if (newPassword.length < 6) {
+    return errorResponse(res, 'New password must be at least 6 characters', 400);
+  }
+
+  // Get user with password
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+  });
+
+  // Verify current password
+  const isPasswordValid = await comparePassword(currentPassword, user.passwordHash);
+
+  if (!isPasswordValid) {
+    return errorResponse(res, 'Current password is incorrect', 401);
+  }
+
+  // Hash new password
+  const passwordHash = await hashPassword(newPassword);
+
+  // Update password
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
+  });
+
+  // Create audit log
+  await prisma.auditLog.create({
+    data: {
+      userId: user.id,
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: user.id,
+      changes: JSON.stringify({ action: 'Password changed' }),
+    },
+  });
+
+  console.log('[PASSWORD CHANGE] Password changed for user:', user.email);
+
+  return successResponse(res, null, 'Password changed successfully');
 });

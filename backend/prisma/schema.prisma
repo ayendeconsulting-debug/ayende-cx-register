@@ -35,6 +35,8 @@ model User {
   @@index([businessId])
   @@index([email])
   @@index([username])
+  passwordResetToken    String?
+  passwordResetExpires  DateTime?
 }
 
 model Business {
