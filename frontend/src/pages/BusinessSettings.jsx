@@ -13,11 +13,49 @@ import {
   MapPin,
   Receipt,
   Percent,
-  RefreshCw
+  RefreshCw,
+  DollarSign,
+  Coins
 } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+
+// Currency options with symbols and codes
+const CURRENCY_OPTIONS = [
+  { code: 'NGN', symbol: '₦', name: 'Nigerian Naira', country: 'Nigeria' },
+  { code: 'ZAR', symbol: 'R', name: 'South African Rand', country: 'South Africa' },
+  { code: 'GHS', symbol: '₵', name: 'Ghanaian Cedi', country: 'Ghana' },
+  { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling', country: 'Kenya' },
+  { code: 'UGX', symbol: 'USh', name: 'Ugandan Shilling', country: 'Uganda' },
+  { code: 'TZS', symbol: 'TSh', name: 'Tanzanian Shilling', country: 'Tanzania' },
+  { code: 'RWF', symbol: 'FRw', name: 'Rwandan Franc', country: 'Rwanda' },
+  { code: 'XOF', symbol: 'CFA', name: 'West African CFA Franc', country: 'West Africa' },
+  { code: 'XAF', symbol: 'FCFA', name: 'Central African CFA Franc', country: 'Central Africa' },
+  { code: 'EGP', symbol: 'E£', name: 'Egyptian Pound', country: 'Egypt' },
+  { code: 'MAD', symbol: 'د.م.', name: 'Moroccan Dirham', country: 'Morocco' },
+  { code: 'USD', symbol: '$', name: 'US Dollar', country: 'United States' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar', country: 'Canada' },
+  { code: 'GBP', symbol: '£', name: 'British Pound', country: 'United Kingdom' },
+  { code: 'EUR', symbol: '€', name: 'Euro', country: 'European Union' },
+  { code: 'INR', symbol: '₹', name: 'Indian Rupee', country: 'India' },
+  { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham', country: 'United Arab Emirates' },
+  { code: 'SAR', symbol: '﷼', name: 'Saudi Riyal', country: 'Saudi Arabia' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', country: 'Australia' },
+  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', country: 'China' },
+  { code: 'JPY', symbol: '¥', name: 'Japanese Yen', country: 'Japan' },
+  { code: 'BRL', symbol: 'R$', name: 'Brazilian Real', country: 'Brazil' },
+  { code: 'MXN', symbol: 'Mex$', name: 'Mexican Peso', country: 'Mexico' },
+];
+
+// Group currencies by region
+const CURRENCY_REGIONS = {
+  'Africa': ['NGN', 'ZAR', 'GHS', 'KES', 'UGX', 'TZS', 'RWF', 'XOF', 'XAF', 'EGP', 'MAD'],
+  'Americas': ['USD', 'CAD', 'BRL', 'MXN'],
+  'Europe': ['GBP', 'EUR'],
+  'Asia & Middle East': ['INR', 'AED', 'SAR', 'CNY', 'JPY'],
+  'Oceania': ['AUD'],
+};
 
 const BusinessSettings = () => {
   const { updateTheme } = useTheme();
@@ -25,7 +63,7 @@ const BusinessSettings = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [activeTab, setActiveTab] = useState('general'); // general, theme, tax
+  const [activeTab, setActiveTab] = useState('general');
 
   const [settings, setSettings] = useState({
     businessName: '',
@@ -49,12 +87,25 @@ const BusinessSettings = () => {
     receiptFooter: '',
     currency: '$',
     currencyCode: 'USD',
+    currencyPosition: 'before',
+    decimalSeparator: '.',
+    thousandsSeparator: ',',
+    decimalPlaces: 2,
   });
 
   const [themeForm, setThemeForm] = useState({
     primaryColor: '#3B82F6',
     secondaryColor: '#10B981',
     logoUrl: '',
+  });
+
+  const [currencyForm, setCurrencyForm] = useState({
+    currency: '$',
+    currencyCode: 'USD',
+    currencyPosition: 'before',
+    decimalSeparator: '.',
+    thousandsSeparator: ',',
+    decimalPlaces: 2,
   });
 
   useEffect(() => {
@@ -65,7 +116,7 @@ const BusinessSettings = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('accessToken');
-      
+
       const response = await axios.get(`${API_BASE_URL}/business-settings`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -78,6 +129,14 @@ const BusinessSettings = () => {
         primaryColor: data.primaryColor || '#3B82F6',
         secondaryColor: data.secondaryColor || '#10B981',
         logoUrl: data.logoUrl || '',
+      });
+      setCurrencyForm({
+        currency: data.currency || '$',
+        currencyCode: data.currencyCode || 'USD',
+        currencyPosition: data.currencyPosition || 'before',
+        decimalSeparator: data.decimalSeparator || '.',
+        thousandsSeparator: data.thousandsSeparator || ',',
+        decimalPlaces: data.decimalPlaces ?? 2,
       });
       setError('');
     } catch (error) {
@@ -98,7 +157,7 @@ const BusinessSettings = () => {
 
   const handleThemeSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setSaving(true);
       const token = localStorage.getItem('accessToken');
@@ -117,7 +176,6 @@ const BusinessSettings = () => {
         ...prev,
         ...response.data.data,
       }));
-      // Update theme globally
       updateTheme({
         primaryColor: response.data.data.primaryColor,
         secondaryColor: response.data.data.secondaryColor,
@@ -145,7 +203,7 @@ const BusinessSettings = () => {
 
   const handleInfoSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setSaving(true);
       const token = localStorage.getItem('accessToken');
@@ -187,7 +245,7 @@ const BusinessSettings = () => {
 
   const handleTaxSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setSaving(true);
       const token = localStorage.getItem('accessToken');
@@ -217,6 +275,82 @@ const BusinessSettings = () => {
       setTimeout(() => setError(''), 3000);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCurrencyChange = (e) => {
+    const { name, value } = e.target;
+    setCurrencyForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleCurrencySelect = (currencyCode) => {
+    const selected = CURRENCY_OPTIONS.find(c => c.code === currencyCode);
+    if (selected) {
+      setCurrencyForm(prev => ({
+        ...prev,
+        currencyCode: selected.code,
+        currency: selected.symbol,
+      }));
+    }
+  };
+
+  const handleCurrencySubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+      const token = localStorage.getItem('accessToken');
+
+      const updateData = {
+        currency: currencyForm.currency,
+        currencyCode: currencyForm.currencyCode,
+        currencyPosition: currencyForm.currencyPosition,
+        decimalSeparator: currencyForm.decimalSeparator,
+        thousandsSeparator: currencyForm.thousandsSeparator,
+        decimalPlaces: parseInt(currencyForm.decimalPlaces),
+      };
+
+      await axios.patch(
+        `${API_BASE_URL}/business-settings/currency`,
+        updateData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      setSettings(prev => ({
+        ...prev,
+        ...updateData,
+      }));
+
+      setSuccessMessage('Currency settings updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error updating currency settings:', error);
+      setError(error.response?.data?.message || 'Failed to update currency settings');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Format preview amount based on current settings
+  const formatPreviewAmount = (amount) => {
+    const parts = amount.toFixed(currencyForm.decimalPlaces).split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, currencyForm.thousandsSeparator);
+    const formatted = parts.length > 1 
+      ? `${integerPart}${currencyForm.decimalSeparator}${parts[1]}`
+      : integerPart;
+    
+    if (currencyForm.currencyPosition === 'before') {
+      return `${currencyForm.currency}${formatted}`;
+    } else {
+      return `${formatted}${currencyForm.currency}`;
     }
   };
 
@@ -265,10 +399,10 @@ const BusinessSettings = () => {
 
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
-          <div className="flex border-b border-gray-200">
+          <div className="flex border-b border-gray-200 overflow-x-auto">
             <button
               onClick={() => setActiveTab('general')}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+              className={`flex-1 min-w-max px-6 py-4 text-sm font-medium transition-colors ${
                 activeTab === 'general'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
@@ -278,8 +412,19 @@ const BusinessSettings = () => {
               General Info
             </button>
             <button
+              onClick={() => setActiveTab('currency')}
+              className={`flex-1 min-w-max px-6 py-4 text-sm font-medium transition-colors ${
+                activeTab === 'currency'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Coins className="w-4 h-4 inline-block mr-2" />
+              Currency
+            </button>
+            <button
               onClick={() => setActiveTab('theme')}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+              className={`flex-1 min-w-max px-6 py-4 text-sm font-medium transition-colors ${
                 activeTab === 'theme'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
@@ -290,7 +435,7 @@ const BusinessSettings = () => {
             </button>
             <button
               onClick={() => setActiveTab('tax')}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+              className={`flex-1 min-w-max px-6 py-4 text-sm font-medium transition-colors ${
                 activeTab === 'tax'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
@@ -306,7 +451,7 @@ const BusinessSettings = () => {
         {activeTab === 'general' && (
           <form onSubmit={handleInfoSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Business Information</h2>
-            
+
             <div className="space-y-6">
               {/* Business Name */}
               <div>
@@ -540,11 +685,196 @@ const BusinessSettings = () => {
           </form>
         )}
 
+        {/* Currency Tab */}
+        {activeTab === 'currency' && (
+          <form onSubmit={handleCurrencySubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Currency Settings</h2>
+
+            {/* Live Preview */}
+            <div className="mb-8 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+              <p className="text-sm text-gray-600 mb-2">Preview</p>
+              <div className="text-4xl font-bold text-green-700">
+                {formatPreviewAmount(1234567.89)}
+              </div>
+              <p className="text-sm text-gray-500 mt-2">Sample amount: 1,234,567.89</p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Currency Selection by Region */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Currency
+                </label>
+                
+                {Object.entries(CURRENCY_REGIONS).map(([region, codes]) => (
+                  <div key={region} className="mb-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{region}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {codes.map(code => {
+                        const currency = CURRENCY_OPTIONS.find(c => c.code === code);
+                        if (!currency) return null;
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            onClick={() => handleCurrencySelect(code)}
+                            className={`p-3 border-2 rounded-lg text-left transition-all ${
+                              currencyForm.currencyCode === code
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl font-bold text-gray-800">{currency.symbol}</span>
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{currency.code}</p>
+                                <p className="text-xs text-gray-500">{currency.country}</p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Custom Symbol Override */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Custom Settings</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Currency Symbol
+                    </label>
+                    <input
+                      type="text"
+                      name="currency"
+                      value={currencyForm.currency}
+                      onChange={handleCurrencyChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xl font-bold text-center"
+                      maxLength={5}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Override the currency symbol if needed</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Currency Code
+                    </label>
+                    <input
+                      type="text"
+                      name="currencyCode"
+                      value={currencyForm.currencyCode}
+                      onChange={handleCurrencyChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
+                      maxLength={3}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">ISO 4217 currency code (e.g., USD, NGN)</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Formatting Options */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Number Formatting</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Symbol Position
+                    </label>
+                    <select
+                      name="currencyPosition"
+                      value={currencyForm.currencyPosition}
+                      onChange={handleCurrencyChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="before">Before amount ($100)</option>
+                      <option value="after">After amount (100$)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Decimal Separator
+                    </label>
+                    <select
+                      name="decimalSeparator"
+                      value={currencyForm.decimalSeparator}
+                      onChange={handleCurrencyChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value=".">Period (100.00)</option>
+                      <option value=",">Comma (100,00)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Thousands Separator
+                    </label>
+                    <select
+                      name="thousandsSeparator"
+                      value={currencyForm.thousandsSeparator}
+                      onChange={handleCurrencyChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value=",">Comma (1,000)</option>
+                      <option value=".">Period (1.000)</option>
+                      <option value=" ">Space (1 000)</option>
+                      <option value="">None (1000)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Decimal Places
+                  </label>
+                  <select
+                    name="decimalPlaces"
+                    value={currencyForm.decimalPlaces}
+                    onChange={handleCurrencyChange}
+                    className="w-full md:w-48 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="0">0 (100)</option>
+                    <option value="2">2 (100.00)</option>
+                    <option value="3">3 (100.000)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end pt-4">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <Loader className="w-5 h-5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Save Currency Settings
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
         {/* Theme Tab */}
         {activeTab === 'theme' && (
           <form onSubmit={handleThemeSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Customize Your Theme</h2>
-            
+
             {/* Live Preview */}
             <div className="mb-8">
               <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -691,7 +1021,7 @@ const BusinessSettings = () => {
         {activeTab === 'tax' && (
           <form onSubmit={handleTaxSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Tax Configuration</h2>
-            
+
             <div className="space-y-6">
               {/* Tax Enabled */}
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
