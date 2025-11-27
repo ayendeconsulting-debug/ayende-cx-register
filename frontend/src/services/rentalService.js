@@ -1,4 +1,4 @@
-import api from './api';
+import apiClient from '../config/apiClient';
 
 const rentalService = {
   // Get all rentals with optional filters
@@ -14,43 +14,43 @@ const rentalService = {
     if (params.limit) queryParams.append('limit', params.limit);
     
     const query = queryParams.toString();
-    const response = await api.get(`/rentals${query ? `?${query}` : ''}`);
+    const response = await apiClient.get(`/rentals${query ? `?${query}` : ''}`);
     return response.data;
   },
 
   // Get single rental by ID
   getRentalById: async (id) => {
-    const response = await api.get(`/rentals/${id}`);
+    const response = await apiClient.get(`/rentals/${id}`);
     return response.data;
   },
 
   // Create new rental contract
   createRental: async (data) => {
-    const response = await api.post('/rentals', data);
+    const response = await apiClient.post('/rentals', data);
     return response.data;
   },
 
   // Process rental return
   processReturn: async (id, data) => {
-    const response = await api.post(`/rentals/${id}/return`, data);
+    const response = await apiClient.post(`/rentals/${id}/return`, data);
     return response.data;
   },
 
   // Close rental contract
   closeRental: async (id, notes = '') => {
-    const response = await api.post(`/rentals/${id}/close`, { notes });
+    const response = await apiClient.post(`/rentals/${id}/close`, { notes });
     return response.data;
   },
 
   // Cancel rental contract
   cancelRental: async (id, reason) => {
-    const response = await api.post(`/rentals/${id}/cancel`, { reason });
+    const response = await apiClient.post(`/rentals/${id}/cancel`, { reason });
     return response.data;
   },
 
   // Get overdue rentals
   getOverdueRentals: async () => {
-    const response = await api.get('/rentals/overdue');
+    const response = await apiClient.get('/rentals/overdue');
     return response.data;
   },
 
@@ -61,15 +61,16 @@ const rentalService = {
     if (endDate) params.append('endDate', endDate);
     
     const query = params.toString();
-    const response = await api.get(`/rentals/reports/summary${query ? `?${query}` : ''}`);
+    const response = await apiClient.get(`/rentals/reports/summary${query ? `?${query}` : ''}`);
     return response.data;
   },
 
   // Update overdue status manually
   updateOverdueStatus: async () => {
-    const response = await api.post('/rentals/update-overdue');
+    const response = await apiClient.post('/rentals/update-overdue');
     return response.data;
   }
 };
 
 export default rentalService;
+
