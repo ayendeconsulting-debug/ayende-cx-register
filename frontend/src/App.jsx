@@ -19,6 +19,7 @@ import Products from "./pages/Products";
 import Customers from "./pages/Customers";
 import Transactions from "./pages/Transactions";
 import Reports from "./pages/Reports";
+import Rentals from "./pages/Rentals";
 import BusinessRegistration from './pages/BusinessRegistration';
 import AcceptInvitation from './pages/AcceptInvitation';
 import ManageInvitations from './pages/ManageInvitations';
@@ -54,6 +55,7 @@ function App() {
               <Route path="/customers" element={<Customers />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/rentals" element={<Rentals />} />
               <Route path="/team/invitations" element={<AdminRoute><ManageInvitations /></AdminRoute>} />
               <Route path="/team/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
               <Route path="/settings/business" element={<AdminRoute><BusinessSettings /></AdminRoute>} />

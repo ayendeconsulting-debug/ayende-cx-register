@@ -10,8 +10,9 @@ import {
   LogOut,
   Menu,
   X,
-  UserCog,      // Add this
-  Settings      // Add this
+  UserCog,
+  Settings,
+  CalendarClock
 } from 'lucide-react';
 import { logout } from '../store/slices/authSlice';
 import { useState } from 'react';
@@ -20,7 +21,7 @@ const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
+  const { user, business } = useSelector((state) => state.auth);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -35,6 +36,13 @@ const Layout = () => {
     { path: '/customers', icon: Users, label: 'Customers' },
     { path: '/transactions', icon: Receipt, label: 'Transactions' },
   ];
+
+  // Add Rentals link (visible to all, but can be restricted)
+  navItems.push({
+    path: '/rentals',
+    icon: CalendarClock,
+    label: 'Rentals'
+  });
 
   // Add Admin-only navigation items
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
@@ -71,7 +79,7 @@ const Layout = () => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -130,7 +138,7 @@ const Layout = () => {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 bg-white z-40 pt-20">
+        <div className="md:hidden fixed inset-0 bg-white z-40 pt-20 overflow-y-auto">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -152,7 +160,7 @@ const Layout = () => {
             })}
           </nav>
 
-          <div className="p-4 border-t absolute bottom-0 left-0 right-0">
+          <div className="p-4 border-t absolute bottom-0 left-0 right-0 bg-white">
             <div className="mb-3 px-4">
               <p className="text-sm font-medium text-gray-900">
                 {user?.firstName} {user?.lastName}
