@@ -305,12 +305,7 @@ const Customers = () => {
     });
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(parseFloat(amount) || 0);
-  };
+  
 
   const getCustomerStats = () => {
     return {

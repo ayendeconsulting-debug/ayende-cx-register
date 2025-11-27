@@ -146,12 +146,7 @@ const Rentals = () => {
     fetchRentals();
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'CAD'
-    }).format(amount || 0);
-  };
+  
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';

@@ -174,13 +174,7 @@ const Inventory = () => {
     return d.toLocaleDateString();
   };
 
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
