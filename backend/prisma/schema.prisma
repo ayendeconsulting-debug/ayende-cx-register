@@ -29,6 +29,7 @@ model User {
   createdAdjustments    StockAdjustment[]         @relation("CreatedBy")
   adjustmentApprovals   StockAdjustmentApproval[]
   stockMovements        StockMovementHistory[]
+  processedReturns      RentalContract[]          @relation("ReturnProcessor")
 
   @@unique([businessId, email])
   @@unique([businessId, username])
@@ -74,6 +75,10 @@ model Business {
   updatedAt              DateTime                @updatedAt
   lastSyncedAt           DateTime?               @db.Timestamp(6)
   syncStatus             SyncStatus?             @default(PENDING)
+  // Rental Settings
+  rentalEnabled          Boolean                 @default(false)
+  defaultDepositPercent  Decimal?                @default(25) @db.Decimal(5, 2)
+  overdueGracePeriodDays Int?                    @default(0)
   categories             Category[]
   customers              Customer[]
   loyaltyReconciliations LoyaltyReconciliation[]
@@ -87,6 +92,7 @@ model Business {
   UserInvitation         UserInvitation[]
   stockAdjustments       StockAdjustment[]
   syncLogs               SyncLog[]
+  rentalContracts        RentalContract[]
 
   @@index([businessName])
   @@index([externalTenantId])
@@ -132,6 +138,7 @@ model Customer {
   reconciliations     LoyaltyReconciliation[]
   loyaltyTransactions LoyaltyTransaction[]
   transactions        Transaction[]
+  rentalContracts     RentalContract[]
 
   @@unique([businessId, email])
   @@unique([businessId, phone])
@@ -163,32 +170,43 @@ model Category {
 }
 
 model Product {
-  id               String                 @id @default(uuid())
-  sku              String
-  name             String
-  description      String?
-  categoryId       String
-  price            Decimal                @db.Decimal(10, 2)
-  costPrice        Decimal?               @db.Decimal(10, 2)
-  stockQuantity    Int                    @default(0)
-  lowStockAlert    Int                    @default(10)
-  unit             String                 @default("unit")
-  barcode          String?
-  imageUrl         String?
-  isActive         Boolean                @default(true)
-  isTaxable        Boolean                @default(true)
-  loyaltyPoints    Int                    @default(0)
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  businessId       String
-  currency         String                 @default("$")
-  currencyCode     String                 @default("USD")
-  business         Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  category         Category               @relation(fields: [categoryId], references: [id])
-  stockMovements   StockMovement[]
-  transactionItems TransactionItem[]
-  adjustments      StockAdjustment[]
-  movementHistory  StockMovementHistory[]
+  id                  String               @id @default(uuid())
+  sku                 String
+  name                String
+  description         String?
+  categoryId          String
+  price               Decimal              @db.Decimal(10, 2)
+  costPrice           Decimal?             @db.Decimal(10, 2)
+  stockQuantity       Int                  @default(0)
+  lowStockAlert       Int                  @default(10)
+  unit                String               @default("unit")
+  barcode             String?
+  imageUrl            String?
+  isActive            Boolean              @default(true)
+  isTaxable           Boolean              @default(true)
+  loyaltyPoints       Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  businessId          String
+  currency            String               @default("$")
+  currencyCode        String               @default("USD")
+  // Rental fields
+  isRental            Boolean              @default(false)
+  dailyRate           Decimal?             @db.Decimal(10, 2)
+  hourlyRate          Decimal?             @db.Decimal(10, 2)
+  weeklyRate          Decimal?             @db.Decimal(10, 2)
+  latePenaltyRate     Decimal?             @db.Decimal(10, 2)
+  minRentalDuration   Int?                 @default(1)
+  maxRentalDuration   Int?
+  requiresDeposit     Boolean              @default(true)
+  depositAmount       Decimal?             @db.Decimal(10, 2)
+  business            Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category            Category             @relation(fields: [categoryId], references: [id])
+  stockMovements      StockMovement[]
+  transactionItems    TransactionItem[]
+  adjustments         StockAdjustment[]
+  movementHistory     StockMovementHistory[]
+  rentalContractItems RentalContractItem[]
 
   @@unique([businessId, barcode])
   @@unique([businessId, sku])
@@ -197,6 +215,7 @@ model Product {
   @@index([barcode])
   @@index([name])
   @@index([sku])
+  @@index([isRental])
 }
 
 model Transaction {
@@ -229,12 +248,15 @@ model Transaction {
   syncedToCrm           Boolean?          @default(false)
   syncError             String?
   lastSyncedAt          DateTime?
+  // Rental reference
+  transactionType       TransactionType   @default(SALE)
   StockMovement         StockMovement[]
   business              Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customer              Customer?         @relation(fields: [customerId], references: [id])
   shift                 Shift?            @relation(fields: [shiftId], references: [id])
   user                  User              @relation(fields: [userId], references: [id])
   items                 TransactionItem[]
+  rentalContract        RentalContract?
 
   @@unique([businessId, transactionNumber])
   @@index([businessId])
@@ -246,6 +268,7 @@ model Transaction {
   @@index([status])
   @@index([syncedToCRM])
   @@index([syncedToCrm])
+  @@index([transactionType])
 }
 
 model TransactionItem {
@@ -263,6 +286,10 @@ model TransactionItem {
   createdAt     DateTime    @default(now())
   currency      String      @default("$")
   currencyCode  String      @default("CAD")
+  // Rental fields for line item
+  isRentalItem  Boolean     @default(false)
+  rentalDays    Int?
+  dailyRate     Decimal?    @db.Decimal(10, 2)
   product       Product     @relation(fields: [productId], references: [id])
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
@@ -554,6 +581,116 @@ model SystemConfig {
   @@index([key])
 }
 
+// ============================================================================
+// RENTAL MANAGEMENT MODELS
+// ============================================================================
+
+model RentalContract {
+  id                 String               @id @default(uuid())
+  contractNumber     String
+  businessId         String
+  customerId         String
+  transactionId      String?              @unique
+  
+  // Dates
+  startDate          DateTime
+  expectedReturnDate DateTime
+  actualReturnDate   DateTime?
+  
+  // Rental duration tracking
+  rentalDays         Int
+  
+  // Financials
+  subtotal           Decimal              @db.Decimal(10, 2)
+  taxAmount          Decimal              @default(0) @db.Decimal(10, 2)
+  depositAmount      Decimal              @db.Decimal(10, 2)
+  depositReturned    Decimal?             @db.Decimal(10, 2)
+  penaltyAmount      Decimal              @default(0) @db.Decimal(10, 2)
+  damageCharges      Decimal              @default(0) @db.Decimal(10, 2)
+  totalDue           Decimal              @db.Decimal(10, 2)
+  totalPaid          Decimal              @default(0) @db.Decimal(10, 2)
+  balanceDue         Decimal              @default(0) @db.Decimal(10, 2)
+  
+  // Currency
+  currency           String               @default("$")
+  currencyCode       String               @default("CAD")
+  
+  // Status
+  status             RentalStatus         @default(ACTIVE)
+  
+  // Return processing
+  returnedBy         String?
+  returnNotes        String?
+  damageNotes        String?
+  
+  // Contact info for rental period
+  contactPhone       String?
+  contactEmail       String?
+  deliveryAddress    String?
+  
+  // Notifications tracking
+  overdueNotified    Boolean              @default(false)
+  overdueNotifiedAt  DateTime?
+  reminderSent       Boolean              @default(false)
+  reminderSentAt     DateTime?
+  
+  // Timestamps
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  closedAt           DateTime?
+  
+  // Relations
+  business           Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer           Customer             @relation(fields: [customerId], references: [id])
+  transaction        Transaction?         @relation(fields: [transactionId], references: [id])
+  returnProcessor    User?                @relation("ReturnProcessor", fields: [returnedBy], references: [id])
+  items              RentalContractItem[]
+  
+  @@unique([businessId, contractNumber])
+  @@index([businessId])
+  @@index([customerId])
+  @@index([status])
+  @@index([expectedReturnDate])
+  @@index([startDate])
+  @@map("rental_contracts")
+}
+
+model RentalContractItem {
+  id               String          @id @default(uuid())
+  contractId       String
+  productId        String
+  productName      String
+  sku              String
+  quantity         Int
+  dailyRate        Decimal         @db.Decimal(10, 2)
+  subtotal         Decimal         @db.Decimal(10, 2)
+  
+  // Return tracking
+  returnedQuantity Int             @default(0)
+  damagedQuantity  Int             @default(0)
+  missingQuantity  Int             @default(0)
+  
+  // Damage details
+  damageDescription String?
+  damageCharge      Decimal        @default(0) @db.Decimal(10, 2)
+  
+  // Timestamps
+  createdAt        DateTime        @default(now())
+  returnedAt       DateTime?
+  
+  // Relations
+  contract         RentalContract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  product          Product         @relation(fields: [productId], references: [id])
+  
+  @@index([contractId])
+  @@index([productId])
+  @@map("rental_contract_items")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
 enum UserRole {
   SUPER_ADMIN
   ADMIN
@@ -592,6 +729,8 @@ enum StockMovementType {
   DAMAGE
   TRANSFER
   WRITE_OFF
+  RENTAL_OUT
+  RENTAL_RETURN
 }
 
 enum InvitationStatus {
@@ -615,6 +754,8 @@ enum AdjustmentMovementType {
   PURCHASE
   TRANSFER
   RETURN
+  RENTAL_OUT
+  RENTAL_RETURN
 }
 
 enum AdjustmentReason {
@@ -628,6 +769,7 @@ enum AdjustmentReason {
   PHYSICAL_COUNT_CORRECTION
   SYSTEM_ERROR_CORRECTION
   TRANSFER_CORRECTION
+  RENTAL_DAMAGE
   OTHER
 }
 
@@ -660,6 +802,9 @@ enum AuditAction {
   VOID_TRANSACTION
   REFUND
   STOCK_ADJUSTMENT
+  RENTAL_CREATE
+  RENTAL_RETURN
+  RENTAL_CLOSE
 }
 
 enum LoyaltyTransactionType {
@@ -675,6 +820,23 @@ enum TransactionStatus {
   COMPLETED
   VOID
   REFUNDED
+}
+
+enum TransactionType {
+  SALE
+  RENTAL
+  REFUND
+  EXCHANGE
+}
+
+enum RentalStatus {
+  DRAFT
+  ACTIVE
+  OVERDUE
+  PARTIALLY_RETURNED
+  RETURNED
+  CLOSED
+  CANCELLED
 }
 
 enum EntityMappingType {
@@ -715,4 +877,5 @@ enum EntityType {
   transaction
   product
   business
+  rental
 }

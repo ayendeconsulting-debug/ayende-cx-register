@@ -23,6 +23,10 @@ import customerRoutes from './routes/customerRoutes.js';
 import businessRoutes from './routes/businessRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import businessSettingsRoutes from './routes/businessSettingsRoutes.js';
+// ============================================
+// RENTAL MANAGEMENT ROUTES
+// ============================================
+import rentalRoutes from './routes/rentalRoutes.js';
 
 // ============================================
 // SHIFT & STOCK MANAGEMENT ROUTES
@@ -62,6 +66,7 @@ import * as syncJob from './cron/syncJob.js';
 import { initializeReconciliationJob } from './cron/reconciliationJob.js';
 import { initializeEmailJobs } from './cron/emailJobs.js';
 import { initCrmSyncScheduler } from './jobs/crmSyncScheduler.js';
+import { initializeRentalOverdueJob } from './cron/rentalOverdueJob.js';
 
 
 // Load environment variables
@@ -257,6 +262,7 @@ app.use(`/api/${API_VERSION}/business-settings`, businessSettingsRoutes);
 app.use(`/api/${API_VERSION}/shifts`, shiftRoutes);
 app.use(`/api/${API_VERSION}/stock-adjustments`, stockAdjustmentRoutes);
 app.use(`/api/${API_VERSION}/bulk-upload`, bulkUploadRoutes);
+app.use(`/api/${API_VERSION}/rentals`, rentalRoutes);
 
 // Registration and invitation routes
 app.use(`/api/${API_VERSION}/registration`, registrationRoutes);
@@ -471,7 +477,14 @@ app.listen(PORT, () => {
   } else {
     console.log('  ⚠  Email jobs disabled\n');
   }
-  
+  // Rental overdue job
+    try {
+      initializeRentalOverdueJob();
+      console.log('  ✓ Rental overdue job initialized successfully\n');
+    } catch (error) {
+      console.error('  ✗ Failed to initialize rental overdue job:', error.message);
+    }
+    
   // CRM sync scheduler
   if (process.env.ENABLE_CRM_SYNC === 'true') {
     try {

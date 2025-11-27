@@ -582,6 +582,360 @@ export const sendInvitationReminderEmail = async ({
   }
 };
 
+// ============================================
+// RENTAL EMAIL FUNCTIONS
+// Add these functions to your existing emailService.js
+// ============================================
+
+/**
+ * Send rental overdue notification email
+ */
+export const sendRentalOverdueNotification = async ({
+  to,
+  customerName,
+  contractNumber,
+  businessName,
+  businessPhone,
+  expectedReturnDate,
+  overdueDays,
+  estimatedPenalty,
+  currency,
+  items
+}) => {
+  const itemsList = items
+    .map(item => `• ${item.name} (Qty: ${item.quantity})`)
+    .join('\n');
+
+  const formattedDate = new Date(expectedReturnDate).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const subject = `⚠️ Rental Overdue - Contract ${contractNumber}`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #DC2626; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+        .warning-box { background: #FEF2F2; border: 1px solid #DC2626; border-radius: 8px; padding: 15px; margin: 15px 0; }
+        .items-list { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .penalty { font-size: 18px; color: #DC2626; font-weight: bold; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+        .cta-button { display: inline-block; background: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>⚠️ Rental Overdue Notice</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${customerName},</p>
+          
+          <div class="warning-box">
+            <strong>Your rental is ${overdueDays} day(s) overdue!</strong>
+            <p>Contract #${contractNumber} was due for return on <strong>${formattedDate}</strong>.</p>
+          </div>
+          
+          <h3>Items to Return:</h3>
+          <div class="items-list">
+            <pre>${itemsList}</pre>
+          </div>
+          
+          <p class="penalty">Estimated Late Fee: ${currency}${estimatedPenalty.toFixed(2)}</p>
+          <p><em>Late fees continue to accumulate daily until items are returned.</em></p>
+          
+          <p>Please return the items as soon as possible to avoid additional charges.</p>
+          
+          <p>
+            <strong>Contact us:</strong><br>
+            ${businessName}<br>
+            Phone: ${businessPhone || 'N/A'}
+          </p>
+        </div>
+        <div class="footer">
+          <p>This is an automated message from ${businessName}.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const textContent = `
+RENTAL OVERDUE NOTICE
+
+Dear ${customerName},
+
+Your rental is ${overdueDays} day(s) overdue!
+
+Contract #${contractNumber} was due for return on ${formattedDate}.
+
+Items to Return:
+${itemsList}
+
+Estimated Late Fee: ${currency}${estimatedPenalty.toFixed(2)}
+Late fees continue to accumulate daily until items are returned.
+
+Please return the items as soon as possible to avoid additional charges.
+
+Contact us:
+${businessName}
+Phone: ${businessPhone || 'N/A'}
+
+This is an automated message from ${businessName}.
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html: htmlContent,
+    text: textContent
+  });
+};
+
+/**
+ * Send rental return reminder email
+ */
+export const sendRentalReminderNotification = async ({
+  to,
+  customerName,
+  contractNumber,
+  businessName,
+  businessPhone,
+  businessAddress,
+  expectedReturnDate,
+  items
+}) => {
+  const itemsList = items
+    .map(item => `• ${item.name} (Qty: ${item.quantity})`)
+    .join('\n');
+
+  const formattedDate = new Date(expectedReturnDate).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const subject = `📅 Rental Return Reminder - Contract ${contractNumber}`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #3B82F6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+        .reminder-box { background: #EFF6FF; border: 1px solid #3B82F6; border-radius: 8px; padding: 15px; margin: 15px 0; }
+        .items-list { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📅 Rental Return Reminder</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${customerName},</p>
+          
+          <div class="reminder-box">
+            <strong>Friendly Reminder:</strong>
+            <p>Your rental (Contract #${contractNumber}) is due for return on <strong>${formattedDate}</strong>.</p>
+          </div>
+          
+          <h3>Items to Return:</h3>
+          <div class="items-list">
+            <pre>${itemsList}</pre>
+          </div>
+          
+          <p>Please ensure all items are returned by the due date to avoid late fees.</p>
+          
+          <p>
+            <strong>Return Location:</strong><br>
+            ${businessName}<br>
+            ${businessAddress || ''}<br>
+            Phone: ${businessPhone || 'N/A'}
+          </p>
+          
+          <p>Thank you for choosing ${businessName}!</p>
+        </div>
+        <div class="footer">
+          <p>This is an automated reminder from ${businessName}.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const textContent = `
+RENTAL RETURN REMINDER
+
+Dear ${customerName},
+
+Friendly Reminder: Your rental (Contract #${contractNumber}) is due for return on ${formattedDate}.
+
+Items to Return:
+${itemsList}
+
+Please ensure all items are returned by the due date to avoid late fees.
+
+Return Location:
+${businessName}
+${businessAddress || ''}
+Phone: ${businessPhone || 'N/A'}
+
+Thank you for choosing ${businessName}!
+
+This is an automated reminder from ${businessName}.
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html: htmlContent,
+    text: textContent
+  });
+};
+
+/**
+ * Send rental contract confirmation email
+ */
+export const sendRentalContractConfirmation = async ({
+  to,
+  customerName,
+  contractNumber,
+  businessName,
+  businessPhone,
+  startDate,
+  expectedReturnDate,
+  items,
+  subtotal,
+  taxAmount,
+  depositAmount,
+  totalDue,
+  currency
+}) => {
+  const itemsHtml = items.map(item => `
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.name}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${currency}${Number(item.dailyRate).toFixed(2)}/day</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${currency}${Number(item.subtotal).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const formattedStartDate = new Date(startDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+  
+  const formattedReturnDate = new Date(expectedReturnDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  const subject = `✅ Rental Confirmed - Contract ${contractNumber}`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #10B981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+        .info-box { background: #ECFDF5; border: 1px solid #10B981; border-radius: 8px; padding: 15px; margin: 15px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background: #f3f4f6; padding: 10px; text-align: left; }
+        .totals { background: white; padding: 15px; border-radius: 8px; }
+        .total-row { display: flex; justify-content: space-between; padding: 5px 0; }
+        .grand-total { font-size: 18px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; margin-top: 10px; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>✅ Rental Confirmed</h1>
+          <p>Contract #${contractNumber}</p>
+        </div>
+        <div class="content">
+          <p>Dear ${customerName},</p>
+          <p>Thank you for your rental! Here are your rental details:</p>
+          
+          <div class="info-box">
+            <strong>Rental Period:</strong><br>
+            Start: ${formattedStartDate}<br>
+            Return By: ${formattedReturnDate}
+          </div>
+          
+          <h3>Rental Items:</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Rate</th>
+                <th style="text-align: right;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          
+          <div class="totals">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span>${currency}${Number(subtotal).toFixed(2)}</span>
+            </div>
+            <div class="total-row">
+              <span>Tax:</span>
+              <span>${currency}${Number(taxAmount).toFixed(2)}</span>
+            </div>
+            <div class="total-row">
+              <span>Deposit Paid:</span>
+              <span>${currency}${Number(depositAmount).toFixed(2)}</span>
+            </div>
+            <div class="total-row grand-total">
+              <span>Total Due:</span>
+              <span>${currency}${Number(totalDue).toFixed(2)}</span>
+            </div>
+          </div>
+          
+          <p><strong>Important:</strong> Please return all items by ${formattedReturnDate} to avoid late fees.</p>
+          
+          <p>
+            Questions? Contact us:<br>
+            ${businessName}<br>
+            Phone: ${businessPhone || 'N/A'}
+          </p>
+        </div>
+        <div class="footer">
+          <p>Thank you for choosing ${businessName}!</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html: htmlContent,
+    text: `Rental Confirmed - Contract ${contractNumber}\n\nDear ${customerName},\n\nYour rental has been confirmed.\n\nRental Period: ${formattedStartDate} to ${formattedReturnDate}\n\nTotal Due: ${currency}${Number(totalDue).toFixed(2)}\nDeposit Paid: ${currency}${Number(depositAmount).toFixed(2)}\n\nPlease return all items by the due date to avoid late fees.\n\nThank you for choosing ${businessName}!`
+  });
+};
+
 // ============================================================================
 // PASSWORD RESET & WELCOME EMAIL FUNCTIONS
 // ============================================================================
