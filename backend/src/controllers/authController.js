@@ -121,8 +121,8 @@ export const login = asyncHandler(async (req, res) => {
   // Validate parsed values
   if (!actualUsername || !subdomain) {
     return errorResponse(
-      res, 
-      'Invalid login format. Please use: username.subdomain (e.g., admin.bashevents)', 
+      res,
+      'Invalid login format. Please use: username.subdomain (e.g., admin.bashevents)',
       400
     );
   }
@@ -211,14 +211,24 @@ export const login = asyncHandler(async (req, res) => {
       id: user.business.id,
       name: user.business.businessName,
       subdomain: user.business.subdomain,
+      // Currency settings
       currency: user.business.currency,
       currencyCode: user.business.currencyCode,
+      currencyPosition: user.business.currencyPosition || 'before',
+      decimalSeparator: user.business.decimalSeparator || '.',
+      thousandsSeparator: user.business.thousandsSeparator || ',',
+      decimalPlaces: user.business.decimalPlaces ?? 2,
+      // Tax settings
       taxRate: user.business.taxRate,
       taxLabel: user.business.taxLabel,
+      taxEnabled: user.business.taxEnabled,
+      // Theme settings
       primaryColor: user.business.primaryColor,
       secondaryColor: user.business.secondaryColor,
       logoUrl: user.business.logoUrl,
+      // Feature flags
       rentalEnabled: user.business.rentalEnabled,
+      loyaltyEnabled: user.business.loyaltyEnabled,
     },
     accessToken,
     refreshToken,
@@ -240,19 +250,12 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   // Verify refresh token
   const decoded = verifyRefreshToken(refreshToken);
 
-  // Get user
+  // Get user with business
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true,
-      businessId: true,
-    },
+    include: {
+      business: true
+    }
   });
 
   if (!user || !user.isActive) {
@@ -270,6 +273,26 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   return successResponse(res, {
     accessToken: newAccessToken,
     refreshToken: newRefreshToken,
+    // Include updated business settings on token refresh
+    business: {
+      id: user.business.id,
+      name: user.business.businessName,
+      subdomain: user.business.subdomain,
+      currency: user.business.currency,
+      currencyCode: user.business.currencyCode,
+      currencyPosition: user.business.currencyPosition || 'before',
+      decimalSeparator: user.business.decimalSeparator || '.',
+      thousandsSeparator: user.business.thousandsSeparator || ',',
+      decimalPlaces: user.business.decimalPlaces ?? 2,
+      taxRate: user.business.taxRate,
+      taxLabel: user.business.taxLabel,
+      taxEnabled: user.business.taxEnabled,
+      primaryColor: user.business.primaryColor,
+      secondaryColor: user.business.secondaryColor,
+      logoUrl: user.business.logoUrl,
+      rentalEnabled: user.business.rentalEnabled,
+      loyaltyEnabled: user.business.loyaltyEnabled,
+    },
   }, 'Token refreshed successfully');
 });
 
@@ -299,13 +322,19 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
           subdomain: true,
           currency: true,
           currencyCode: true,
+          currencyPosition: true,
+          decimalSeparator: true,
+          thousandsSeparator: true,
+          decimalPlaces: true,
           taxRate: true,
           taxLabel: true,
+          taxEnabled: true,
           timezone: true,
           primaryColor: true,
           secondaryColor: true,
           logoUrl: true,
           rentalEnabled: true,
+          loyaltyEnabled: true,
         }
       }
     },
@@ -350,7 +379,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   
   if (subdomain) {
     const business = await prisma.business.findUnique({
-      where: { subdomain: subdomain.toLowerCase() }
+      where: { subdomain }
     });
 
     if (!business) {
