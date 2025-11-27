@@ -4,6 +4,7 @@ import {
   updateBusinessTheme,
   updateBusinessInfo,
   updateTaxSettings,
+  updateCurrencySettings,
 } from '../controllers/businessSettingsController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
@@ -23,5 +24,8 @@ router.patch('/info', authorize('ADMIN', 'SUPER_ADMIN'), updateBusinessInfo);
 
 // Update tax settings (Admin only)
 router.patch('/tax', authorize('ADMIN', 'SUPER_ADMIN'), updateTaxSettings);
+
+// Update currency settings (Admin only)
+router.patch('/currency', authorize('ADMIN', 'SUPER_ADMIN'), updateCurrencySettings);
 
 export default router;
