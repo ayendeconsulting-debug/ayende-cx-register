@@ -4,11 +4,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import authService from '../services/authService';
 import toast from 'react-hot-toast';
-import { LogIn, Store } from 'lucide-react';
+import { LogIn, Store, HelpCircle } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
+  const [subdomain, setSubdomain] = useState('');
   const [password, setPassword] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { loading, error } = useSelector((state) => state.auth);
@@ -16,19 +18,29 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!username || !password) {
-      toast.error('Please enter both username and password');
+    if (!username || !subdomain || !password) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    // Validate subdomain format (no spaces, lowercase alphanumeric)
+    const subdomainRegex = /^[a-z0-9]+$/;
+    if (!subdomainRegex.test(subdomain.toLowerCase())) {
+      toast.error('Business code should only contain letters and numbers');
       return;
     }
 
     dispatch(loginStart());
 
+    // Combine username and subdomain for the API
+    const loginUsername = `${username.trim()}.${subdomain.trim().toLowerCase()}`;
+
     try {
-      const response = await authService.login(username, password);
+      const response = await authService.login(loginUsername, password);
 
       if (response.success) {
         dispatch(loginSuccess(response.data));
-        toast.success(`Welcome back, ${response.data.user.fullName}!`);
+        toast.success(`Welcome back, ${response.data.user.firstName}!`);
         navigate('/dashboard');
       } else {
         dispatch(loginFailure(response.message));
@@ -56,7 +68,8 @@ const Login = () => {
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Username Field */}
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
               Username
@@ -65,14 +78,56 @@ const Login = () => {
               id="username"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.trim())}
               className="input-field"
-              placeholder="Enter your username"
+              placeholder="e.g., admin"
               autoComplete="username"
               disabled={loading}
             />
           </div>
 
+          {/* Business Code (Subdomain) Field */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="subdomain" className="block text-sm font-medium text-gray-700">
+                Business Code
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowHelp(!showHelp)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              id="subdomain"
+              type="text"
+              value={subdomain}
+              onChange={(e) => setSubdomain(e.target.value.trim().toLowerCase())}
+              className="input-field"
+              placeholder="e.g., bashevents"
+              autoComplete="organization"
+              disabled={loading}
+            />
+            {showHelp && (
+              <p className="mt-2 text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                Your business code was provided when your business was registered. 
+                It is the unique identifier for your business.
+              </p>
+            )}
+          </div>
+
+          {/* Login Preview */}
+          {username && subdomain && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+              <p className="text-sm text-blue-700">
+                Logging in as: <span className="font-mono font-semibold">{username}.{subdomain}</span>
+              </p>
+            </div>
+          )}
+
+          {/* Password Field */}
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
               Password
@@ -107,7 +162,7 @@ const Login = () => {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !username || !subdomain || !password}
             className="w-full btn-primary flex items-center justify-center gap-2 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
