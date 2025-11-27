@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useDispatch } from 'react-redux';
+import { updateBusiness } from '../store/slices/authSlice';
 import { 
   Building2, 
   Palette, 
@@ -59,6 +61,7 @@ const CURRENCY_REGIONS = {
 
 const BusinessSettings = () => {
   const { updateTheme } = useTheme();
+  const dispatch = useDispatch();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -327,6 +330,9 @@ const BusinessSettings = () => {
         ...prev,
         ...updateData,
       }));
+
+      // Update Redux store so currency is available app-wide
+      dispatch(updateBusiness(updateData));
 
       setSuccessMessage('Currency settings updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);

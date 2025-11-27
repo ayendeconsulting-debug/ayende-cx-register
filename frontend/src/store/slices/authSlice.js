@@ -56,8 +56,40 @@ const authSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+    // New action to update business settings (e.g., after changing currency)
+    updateBusiness: (state, action) => {
+      state.business = {
+        ...state.business,
+        ...action.payload,
+      };
+      // Persist updated business to localStorage
+      localStorage.setItem('business', JSON.stringify(state.business));
+    },
+    // Update tokens on refresh
+    updateTokens: (state, action) => {
+      state.accessToken = action.payload.accessToken;
+      state.refreshToken = action.payload.refreshToken;
+      
+      localStorage.setItem('accessToken', action.payload.accessToken);
+      localStorage.setItem('refreshToken', action.payload.refreshToken);
+      
+      // Also update business if provided
+      if (action.payload.business) {
+        state.business = action.payload.business;
+        localStorage.setItem('business', JSON.stringify(action.payload.business));
+      }
+    },
   },
 });
 
-export const { loginStart, loginSuccess, loginFailure, logout, clearError } = authSlice.actions;
+export const { 
+  loginStart, 
+  loginSuccess, 
+  loginFailure, 
+  logout, 
+  clearError,
+  updateBusiness,
+  updateTokens,
+} = authSlice.actions;
+
 export default authSlice.reducer;
