@@ -954,10 +954,11 @@ const Customers = () => {
           isOpen={showBulkUpload}
           onClose={() => setShowBulkUpload(false)}
           type="customers"
-          onSuccess={loadCustomers}
+          onSuccess={fetchCustomers}
       />
     </div>
   );
 };
 
 export default Customers;
+
