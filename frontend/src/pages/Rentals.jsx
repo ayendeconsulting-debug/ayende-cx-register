@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   Package, 
   Search, 
@@ -26,6 +27,7 @@ import customerService from '../services/customerService';
 import productService from '../services/productService';
 
 const Rentals = () => {
+  const { formatCurrency } = useCurrency();
   const [rentals, setRentals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

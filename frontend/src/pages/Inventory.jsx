@@ -15,6 +15,7 @@ const mockProductService = {
 };
 
 const Inventory = () => {
+  const { formatCurrency } = useCurrency();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);

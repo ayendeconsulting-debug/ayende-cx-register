@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -26,6 +27,7 @@ import PendingApprovals from '../components/PendingApprovals';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { formatCurrency } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('today'); // today, week, month, year
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
@@ -286,12 +288,7 @@ const Dashboard = () => {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(parseFloat(amount) || 0);
-  };
+  
 
   const formatDateTime = (dateString) => {
     if (!dateString) return 'N/A';

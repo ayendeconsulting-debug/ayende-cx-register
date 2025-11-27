@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
@@ -28,6 +29,7 @@ import BulkUploadModal from '../components/BulkUploadModal';
 
 
 const Customers = () => {
+  const { formatCurrency } = useCurrency();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [customers, setCustomers] = useState([]);

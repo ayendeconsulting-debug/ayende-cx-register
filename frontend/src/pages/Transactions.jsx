@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   Receipt, 
   Search, 
@@ -23,6 +24,7 @@ import QuickActions from '../components/QuickActions';
 
 
 const Transactions = () => {
+  const { formatCurrency } = useCurrency();
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
