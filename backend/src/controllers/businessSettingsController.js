@@ -26,6 +26,10 @@ export const getBusinessSettings = async (req, res) => {
         secondaryColor: true,
         currency: true,
         currencyCode: true,
+        currencyPosition: true,
+        decimalSeparator: true,
+        thousandsSeparator: true,
+        decimalPlaces: true,
         timezone: true,
         dateFormat: true,
         timeFormat: true,
@@ -75,7 +79,7 @@ export const updateBusinessTheme = async (req, res) => {
 
     // Validate color format (hex)
     const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-    
+
     if (primaryColor && !hexColorRegex.test(primaryColor)) {
       return res.status(400).json({
         success: false,
@@ -228,6 +232,106 @@ export const updateTaxSettings = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to update tax settings',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Update currency settings
+ */
+export const updateCurrencySettings = async (req, res) => {
+  try {
+    const { businessId } = req.user;
+    const { 
+      currency, 
+      currencyCode, 
+      currencyPosition, 
+      decimalSeparator, 
+      thousandsSeparator, 
+      decimalPlaces 
+    } = req.body;
+
+    // Validate required fields
+    if (!currency || !currencyCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Currency symbol and code are required',
+      });
+    }
+
+    // Validate currency code format (3 uppercase letters)
+    if (!/^[A-Z]{3}$/.test(currencyCode.toUpperCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Currency code must be 3 letters (e.g., USD, NGN, ZAR)',
+      });
+    }
+
+    // Validate currency position
+    if (currencyPosition && !['before', 'after'].includes(currencyPosition)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Currency position must be "before" or "after"',
+      });
+    }
+
+    // Validate decimal places
+    if (decimalPlaces !== undefined && (decimalPlaces < 0 || decimalPlaces > 4)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Decimal places must be between 0 and 4',
+      });
+    }
+
+    const updateData = {
+      currency: currency,
+      currencyCode: currencyCode.toUpperCase(),
+      currencyPosition: currencyPosition || 'before',
+      decimalSeparator: decimalSeparator || '.',
+      thousandsSeparator: thousandsSeparator ?? ',',
+      decimalPlaces: decimalPlaces ?? 2,
+    };
+
+    const updatedBusiness = await prisma.business.update({
+      where: { id: businessId },
+      data: updateData,
+      select: {
+        id: true,
+        currency: true,
+        currencyCode: true,
+        currencyPosition: true,
+        decimalSeparator: true,
+        thousandsSeparator: true,
+        decimalPlaces: true,
+        updatedAt: true,
+      },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        businessId,
+        action: 'UPDATE',
+        entityType: 'business',
+        entityId: businessId,
+        newValues: updateData,
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('User-Agent'),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Currency settings updated successfully',
+      data: updatedBusiness,
+    });
+  } catch (error) {
+    console.error('Error updating currency settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update currency settings',
       error: error.message,
     });
   }

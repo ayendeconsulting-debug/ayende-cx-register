@@ -1,338 +1,152 @@
 import prisma from '../config/database.js';
+import { hashPassword } from '../utils/auth.js';
+import { successResponse, errorResponse, createdResponse } from '../utils/response.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { sendBusinessRegistrationNotification } from '../utils/email.js';
 
 /**
- * Get business settings/theme
+ * @route   GET /api/v1/businesses/check-subdomain/:subdomain
+ * @desc    Check if subdomain is available
+ * @access  Public
  */
-export const getBusinessSettings = async (req, res) => {
-  try {
-    const { businessId } = req.user;
-
-    const business = await prisma.business.findUnique({
-      where: { id: businessId },
-      select: {
-        id: true,
-        businessName: true,
-        subdomain: true,
-        businessEmail: true,
-        businessPhone: true,
-        businessAddress: true,
-        businessCity: true,
-        businessState: true,
-        businessZipCode: true,
-        businessCountry: true,
-        businessWebsite: true,
-        logoUrl: true,
-        primaryColor: true,
-        secondaryColor: true,
-        currency: true,
-        currencyCode: true,
-        currencyPosition: true,
-        decimalSeparator: true,
-        thousandsSeparator: true,
-        decimalPlaces: true,
-        timezone: true,
-        dateFormat: true,
-        timeFormat: true,
-        taxEnabled: true,
-        taxRate: true,
-        taxLabel: true,
-        taxNumber: true,
-        receiptHeader: true,
-        receiptFooter: true,
-        loyaltyEnabled: true,
-        isActive: true,
-        subscriptionTier: true,
-        subscriptionExpiry: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found',
-      });
-    }
-
-    res.json({
-      success: true,
-      data: business,
-    });
-  } catch (error) {
-    console.error('Error fetching business settings:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch business settings',
-      error: error.message,
-    });
+export const checkSubdomainAvailability = asyncHandler(async (req, res) => {
+  const { subdomain } = req.params;
+  
+  // Validate subdomain format (lowercase alphanumeric and hyphens only)
+  const subdomainRegex = /^[a-z0-9-]+$/;
+  if (!subdomainRegex.test(subdomain)) {
+    return errorResponse(res, 'Subdomain must contain only lowercase letters, numbers, and hyphens', 400);
   }
-};
+  
+  // Check if subdomain exists
+  const existingBusiness = await prisma.business.findUnique({
+    where: { subdomain }
+  });
+  
+  return successResponse(res, {
+    available: !existingBusiness,
+    subdomain
+  }, existingBusiness ? 'Subdomain is already taken' : 'Subdomain is available');
+});
 
 /**
- * Update business theme
+ * @route   POST /api/v1/businesses/register
+ * @desc    Register new business with owner account
+ * @access  Public
  */
-export const updateBusinessTheme = async (req, res) => {
-  try {
-    const { businessId } = req.user;
-    const { primaryColor, secondaryColor, logoUrl } = req.body;
-
-    // Validate color format (hex)
-    const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-
-    if (primaryColor && !hexColorRegex.test(primaryColor)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid primary color format. Use hex format (e.g., #667eea)',
-      });
-    }
-
-    if (secondaryColor && !hexColorRegex.test(secondaryColor)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid secondary color format. Use hex format (e.g., #764ba2)',
-      });
-    }
-
-    const updateData = {};
-    if (primaryColor) updateData.primaryColor = primaryColor;
-    if (secondaryColor) updateData.secondaryColor = secondaryColor;
-    if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
-
-    const updatedBusiness = await prisma.business.update({
-      where: { id: businessId },
-      data: updateData,
-      select: {
-        id: true,
-        businessName: true,
-        primaryColor: true,
-        secondaryColor: true,
-        logoUrl: true,
-        updatedAt: true,
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'Business theme updated successfully',
-      data: updatedBusiness,
-    });
-  } catch (error) {
-    console.error('Error updating business theme:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update business theme',
-      error: error.message,
-    });
+export const registerBusiness = asyncHandler(async (req, res) => {
+  const {
+    businessName,
+    subdomain,
+    businessEmail,
+    businessPhone,
+    ownerFirstName,
+    ownerLastName,
+    ownerEmail,
+    ownerPassword,
+    primaryColor,
+    secondaryColor
+  } = req.body;
+  
+  // Validate required fields
+  if (!businessName || !subdomain || !ownerEmail || !ownerPassword) {
+    return errorResponse(res, 'Missing required fields', 400);
   }
-};
+  
+  // Validate subdomain format
+  const subdomainRegex = /^[a-z0-9-]+$/;
+  if (!subdomainRegex.test(subdomain)) {
+    return errorResponse(res, 'Invalid subdomain format', 400);
+  }
+  
+  // Check if subdomain already exists
+  const existingBusiness = await prisma.business.findUnique({
+    where: { subdomain }
+  });
+  
+  if (existingBusiness) {
+    return errorResponse(res, 'Subdomain is already taken', 400);
+  }
+  
+  // Check if email already exists
+  const existingUser = await prisma.user.findFirst({
+    where: { email: ownerEmail }
+  });
+  
+  if (existingUser) {
+    return errorResponse(res, 'Email is already registered', 400);
+  }
+  
+  // Hash password
+  const passwordHash = await hashPassword(ownerPassword);
+  
+  // Create business and owner in a transaction
+  const result = await prisma.$transaction(async (tx) => {
+    // Create business
+    const business = await tx.business.create({
+      data: {
+        businessName,
+        subdomain,
+        businessEmail,
+        businessPhone,
+        primaryColor: primaryColor || '#667eea',
+        secondaryColor: secondaryColor || '#764ba2',
+        currency: 'CAD',
+        currencyCode: 'CAD',
+        timezone: 'America/Toronto',
+        isActive: true
+      }
+    });
+    
+    // Create owner user
+    const owner = await tx.user.create({
+      data: {
+        businessId: business.id,
+        email: ownerEmail,
+        username: 'admin',
+        passwordHash,
+        firstName: ownerFirstName,
+        lastName: ownerLastName,
+        role: 'SUPER_ADMIN',
+        isActive: true
+      }
+    });
+    
+    return { business, owner };
+  });
 
-/**
- * Update business information
- */
-export const updateBusinessInfo = async (req, res) => {
+  // ==========================================
+  // Send admin notification email
+  // ==========================================
   try {
-    const { businessId } = req.user;
-    const {
+    await sendBusinessRegistrationNotification({
       businessName,
+      subdomain,
       businessEmail,
       businessPhone,
-      businessAddress,
-      businessCity,
-      businessState,
-      businessZipCode,
-      businessCountry,
-      businessWebsite,
-      receiptHeader,
-      receiptFooter,
-    } = req.body;
-
-    const updateData = {};
-    if (businessName) updateData.businessName = businessName;
-    if (businessEmail !== undefined) updateData.businessEmail = businessEmail;
-    if (businessPhone !== undefined) updateData.businessPhone = businessPhone;
-    if (businessAddress !== undefined) updateData.businessAddress = businessAddress;
-    if (businessCity !== undefined) updateData.businessCity = businessCity;
-    if (businessState !== undefined) updateData.businessState = businessState;
-    if (businessZipCode !== undefined) updateData.businessZipCode = businessZipCode;
-    if (businessCountry !== undefined) updateData.businessCountry = businessCountry;
-    if (businessWebsite !== undefined) updateData.businessWebsite = businessWebsite;
-    if (receiptHeader !== undefined) updateData.receiptHeader = receiptHeader;
-    if (receiptFooter !== undefined) updateData.receiptFooter = receiptFooter;
-
-    const updatedBusiness = await prisma.business.update({
-      where: { id: businessId },
-      data: updateData,
-      select: {
-        id: true,
-        businessName: true,
-        businessEmail: true,
-        businessPhone: true,
-        businessAddress: true,
-        businessCity: true,
-        businessState: true,
-        businessZipCode: true,
-        businessCountry: true,
-        businessWebsite: true,
-        receiptHeader: true,
-        receiptFooter: true,
-        updatedAt: true,
-      },
+      ownerFirstName,
+      ownerLastName,
+      ownerEmail,
+      primaryColor,
+      secondaryColor
     });
-
-    res.json({
-      success: true,
-      message: 'Business information updated successfully',
-      data: updatedBusiness,
-    });
-  } catch (error) {
-    console.error('Error updating business info:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update business information',
-      error: error.message,
-    });
+    console.log(`[REGISTRATION] Admin notification sent for business: ${businessName}`);
+  } catch (emailError) {
+    // Don't fail the registration if email fails
+    console.error('[REGISTRATION] Failed to send admin notification:', emailError.message);
   }
-};
-
-/**
- * Update tax settings
- */
-export const updateTaxSettings = async (req, res) => {
-  try {
-    const { businessId } = req.user;
-    const { taxEnabled, taxRate, taxLabel, taxNumber } = req.body;
-
-    const updateData = {};
-    if (taxEnabled !== undefined) updateData.taxEnabled = taxEnabled;
-    if (taxRate !== undefined) updateData.taxRate = taxRate;
-    if (taxLabel !== undefined) updateData.taxLabel = taxLabel;
-    if (taxNumber !== undefined) updateData.taxNumber = taxNumber;
-
-    const updatedBusiness = await prisma.business.update({
-      where: { id: businessId },
-      data: updateData,
-      select: {
-        id: true,
-        taxEnabled: true,
-        taxRate: true,
-        taxLabel: true,
-        taxNumber: true,
-        updatedAt: true,
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'Tax settings updated successfully',
-      data: updatedBusiness,
-    });
-  } catch (error) {
-    console.error('Error updating tax settings:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update tax settings',
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Update currency settings
- */
-export const updateCurrencySettings = async (req, res) => {
-  try {
-    const { businessId } = req.user;
-    const { 
-      currency, 
-      currencyCode, 
-      currencyPosition, 
-      decimalSeparator, 
-      thousandsSeparator, 
-      decimalPlaces 
-    } = req.body;
-
-    // Validate required fields
-    if (!currency || !currencyCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Currency symbol and code are required',
-      });
+  // ==========================================
+  
+  return createdResponse(res, {
+    business: {
+      id: result.business.id,
+      name: result.business.businessName,
+      subdomain: result.business.subdomain
+    },
+    owner: {
+      id: result.owner.id,
+      email: result.owner.email,
+      username: result.owner.username
     }
-
-    // Validate currency code format (3 uppercase letters)
-    if (!/^[A-Z]{3}$/.test(currencyCode.toUpperCase())) {
-      return res.status(400).json({
-        success: false,
-        message: 'Currency code must be 3 letters (e.g., USD, NGN, ZAR)',
-      });
-    }
-
-    // Validate currency position
-    if (currencyPosition && !['before', 'after'].includes(currencyPosition)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Currency position must be "before" or "after"',
-      });
-    }
-
-    // Validate decimal places
-    if (decimalPlaces !== undefined && (decimalPlaces < 0 || decimalPlaces > 4)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Decimal places must be between 0 and 4',
-      });
-    }
-
-    const updateData = {
-      currency: currency,
-      currencyCode: currencyCode.toUpperCase(),
-      currencyPosition: currencyPosition || 'before',
-      decimalSeparator: decimalSeparator || '.',
-      thousandsSeparator: thousandsSeparator ?? ',',
-      decimalPlaces: decimalPlaces ?? 2,
-    };
-
-    const updatedBusiness = await prisma.business.update({
-      where: { id: businessId },
-      data: updateData,
-      select: {
-        id: true,
-        currency: true,
-        currencyCode: true,
-        currencyPosition: true,
-        decimalSeparator: true,
-        thousandsSeparator: true,
-        decimalPlaces: true,
-        updatedAt: true,
-      },
-    });
-
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user.id,
-        businessId,
-        action: 'UPDATE',
-        entityType: 'business',
-        entityId: businessId,
-        newValues: updateData,
-        ipAddress: req.ip || req.connection?.remoteAddress,
-        userAgent: req.get('User-Agent'),
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'Currency settings updated successfully',
-      data: updatedBusiness,
-    });
-  } catch (error) {
-    console.error('Error updating currency settings:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update currency settings',
-      error: error.message,
-    });
-  }
-};
+  }, 'Business registered successfully');
+});
