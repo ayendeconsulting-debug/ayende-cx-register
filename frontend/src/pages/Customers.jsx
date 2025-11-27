@@ -16,13 +16,15 @@ import {
   ShoppingBag,
   Filter,
   X,
-  ShoppingCart
+  ShoppingCart,
+  Upload
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import customerService from '../services/customerService';
 import { useDispatch } from 'react-redux';
 import { setCustomer } from '../store/slices/cartSlice';
 import QuickActions from '../components/QuickActions';
+import BulkUploadModal from '../components/BulkUploadModal';
 
 
 const Customers = () => {
@@ -50,6 +52,7 @@ const Customers = () => {
     marketingOptIn: true,
     notes: ''
   });
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const [errors, setErrors] = useState({});
   const loyaltyTiers = ['ALL', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
@@ -418,6 +421,15 @@ const Customers = () => {
               ))}
             </select>
           </div>
+            
+            {/* Bulk Upload Button */}
+          <button
+              onClick={() => setShowBulkUpload(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Upload className="w-5 h-5" />
+              Bulk Upload
+          </button>
 
           {/* Add Customer Button */}
           <button
@@ -937,7 +949,13 @@ const Customers = () => {
       )}
 
       <QuickActions />
-      
+      {/* Bulk Upload Modal */}
+        <BulkUploadModal
+          isOpen={showBulkUpload}
+          onClose={() => setShowBulkUpload(false)}
+          type="customers"
+          onSuccess={loadCustomers}
+      />
     </div>
   );
 };
