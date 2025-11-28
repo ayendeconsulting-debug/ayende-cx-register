@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   addItem,
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react';
 
 const POSTill = () => {
+  const { formatCurrency, symbol } = useCurrency();
   const dispatch = useDispatch();
   const cart = useSelector((state) => state.cart);
   const { user } = useSelector((state) => state.auth);
@@ -390,7 +392,7 @@ const POSTill = () => {
                   <p className="text-sm text-gray-600 mb-2">{product.sku}</p>
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-bold text-primary-600">
-                      ${parseFloat(product.price || 0).toFixed(2)}
+                      {formatCurrency(parseFloat(product.price || 0))}
                     </span>
                     <span className="text-sm text-gray-500">Stock: {product.stockQuantity}</span>
                   </div>
@@ -472,7 +474,7 @@ const POSTill = () => {
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
                         <p className="font-semibold text-gray-800">{item.name}</p>
-                        <p className="text-sm text-gray-600">${parseFloat(item.price || 0).toFixed(2)}</p>
+                        <p className="text-sm text-gray-600">{formatCurrency(parseFloat(item.price || 0))}</p>
                       </div>
                       <button
                         onClick={() => dispatch(removeItem(item.productId))}
@@ -558,11 +560,11 @@ const POSTill = () => {
             <div className="space-y-2 border-t pt-4">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal:</span>
-                <span>${cart.subtotal.toFixed(2)}</span>
+                <span>{formatCurrency(cart.subtotal)}</span>
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Tax (15%):</span>
-                <span>${cart.tax.toFixed(2)}</span>
+                <span>{formatCurrency(cart.tax)}</span>
               </div>
               {cart.discount > 0 && (
                 <div className="flex justify-between text-red-600">
@@ -578,7 +580,7 @@ const POSTill = () => {
               )}
               <div className="flex justify-between text-xl font-bold text-gray-800 pt-2 border-t">
                 <span>Total:</span>
-                <span>${cart.total.toFixed(2)}</span>
+                <span>{formatCurrency(cart.total)}</span>
               </div>
               {cart.customer && (
                 <div className="flex justify-between text-sm text-primary-600">
@@ -645,7 +647,7 @@ const POSTill = () => {
 
             <div className="mb-4 p-4 bg-gray-50 rounded-lg">
               <p className="text-3xl font-bold text-gray-800 text-center">
-                ${cart.total.toFixed(2)}
+                {formatCurrency(cart.total)}
               </p>
             </div>
 
@@ -717,7 +719,7 @@ const POSTill = () => {
               {amountPaid && parseFloat(amountPaid) >= cart.total && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-sm text-gray-600">Change:</p>
-                  <p className="text-2xl font-bold text-green-600">${change.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(change)}</p>
                 </div>
               )}
 
@@ -748,15 +750,15 @@ const POSTill = () => {
             <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total:</span>
-                <span className="font-bold">${parseFloat(lastTransaction.total || 0).toFixed(2)}</span>
+                <span className="font-bold">{formatCurrency(parseFloat(lastTransaction.total || 0))}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Paid:</span>
-                <span className="font-bold">${parseFloat(lastTransaction.amountPaid || 0).toFixed(2)}</span>
+                <span className="font-bold">{formatCurrency(parseFloat(lastTransaction.amountPaid || 0))}</span>
               </div>
               <div className="flex justify-between text-green-600">
                 <span>Change:</span>
-                <span className="font-bold">${parseFloat(lastTransaction.changeGiven || 0).toFixed(2)}</span>
+                <span className="font-bold">{formatCurrency(parseFloat(lastTransaction.changeGiven || 0))}</span>
               </div>
               {lastTransaction.loyaltyPointsEarned > 0 && (
                 <div className="flex justify-between text-primary-600 pt-2 border-t">

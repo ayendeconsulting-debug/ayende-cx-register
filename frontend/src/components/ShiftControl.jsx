@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { useSelector } from 'react-redux';
 import { 
   DollarSign, 
@@ -13,6 +14,7 @@ import toast from 'react-hot-toast';
 import shiftService from '../services/shiftService';
 
 const ShiftControl = () => {
+  const { formatCurrency } = useCurrency();
   const { user } = useSelector((state) => state.auth);
   const [currentShift, setCurrentShift] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,9 +93,9 @@ const ShiftControl = () => {
         if (variance === 0) {
           toast.success('Shift closed successfully! Cash balanced perfectly.');
         } else if (variance > 0) {
-          toast.success(`Shift closed! Cash over by $${Math.abs(variance).toFixed(2)}`);
+          toast.success(`Shift closed! Cash over by ${formatCurrency(Math.abs(variance))}`);
         } else {
-          toast.error(`Shift closed! Cash short by $${Math.abs(variance).toFixed(2)}`);
+          toast.error(`Shift closed! Cash short by ${formatCurrency(Math.abs(variance))}`);
         }
         
         setCurrentShift(null);
@@ -279,7 +281,7 @@ const ShiftControl = () => {
                 <div className="text-sm text-blue-800">
                   <p className="font-medium mb-1">Shift Information</p>
                   <p>Shift: {currentShift.shiftNumber}</p>
-                  <p>Opening Cash: ${parseFloat(currentShift.openingCash).toFixed(2)}</p>
+                  <p>Opening Cash: {formatCurrency(parseFloat(currentShift.openingCash))}</p>
                   <p>Transactions: {currentShift._count?.transactions || 0}</p>
                 </div>
               </div>

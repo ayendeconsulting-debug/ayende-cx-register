@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { X, AlertCircle, Plus, Minus, Edit } from 'lucide-react';
 import toast from 'react-hot-toast';
 import stockAdjustmentService from '../services/stockAdjustmentService';
 
 const StockAdjustmentForm = ({ product, onClose, onSuccess }) => {
+  const { formatCurrency } = useCurrency();
   const [formData, setFormData] = useState({
     productId: product?.id || '',
     adjustmentType: 'ADD',
@@ -320,11 +322,11 @@ const StockAdjustmentForm = ({ product, onClose, onSuccess }) => {
               <div className="border-t pt-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Unit Cost:</span>
-                  <span className="font-medium">${preview.unitCost.toFixed(2)}</span>
+                  <span className="font-medium">{formatCurrency(preview.unitCost.toFixed(2))}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-gray-600">Total Value:</span>
-                  <span className="font-medium">${preview.totalValue.toFixed(2)}</span>
+                  <span className="font-medium">{formatCurrency(preview.totalValue.toFixed(2))}</span>
                 </div>
               </div>
 

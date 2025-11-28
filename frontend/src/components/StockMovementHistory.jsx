@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import stockAdjustmentService from '../services/stockAdjustmentService';
 import toast from 'react-hot-toast';
 
 const StockMovementHistory = ({ isOpen, onClose, product }) => {
+  const { formatCurrency } = useCurrency();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({
@@ -140,13 +142,7 @@ const StockMovementHistory = ({ isOpen, onClose, product }) => {
     toast.success('History exported successfully');
   };
 
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  
 
   // Format date
   const formatDate = (dateString) => {

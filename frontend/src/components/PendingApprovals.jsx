@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import stockAdjustmentService from '../services/stockAdjustmentService';
 import toast from 'react-hot-toast';
 
   const PendingApprovals = ({ isOpen, onClose, onApprovalComplete }) => {
+  const { formatCurrency } = useCurrency();
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedAdjustment, setSelectedAdjustment] = useState(null);
@@ -109,13 +111,7 @@ import toast from 'react-hot-toast';
     }
   };
 
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  
 
   // Format date
   const formatDate = (dateString) => {
