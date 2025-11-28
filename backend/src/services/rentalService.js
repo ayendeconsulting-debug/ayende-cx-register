@@ -355,7 +355,10 @@ export const getOverdueRentals = async (businessId) => {
 };
 
 /**
- * Process rental return
+ * Process rental return - ENHANCED with Early Return Recalculation
+ * 
+ * Key Enhancement: When items are returned EARLY, the system recalculates the total
+ * based on actual rental days instead of the original expected duration.
  */
 export const processRentalReturn = async (businessId, contractId, returnData, userId) => {
   const {
@@ -363,12 +366,18 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
     returnNotes,
     damageNotes,
     depositReturned,
-    additionalCharges = 0
+    additionalCharges = 0,
+    recalculateForEarlyReturn = true  // New option - default true
   } = returnData;
 
   const contract = await prisma.rentalContract.findFirst({
     where: { id: contractId, businessId },
-    include: { items: true }
+    include: { 
+      items: true,
+      business: {
+        select: { currency: true, currencyCode: true }
+      }
+    }
   });
 
   if (!contract) {
@@ -380,15 +389,26 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
   }
 
   const now = new Date();
-  const isOverdue = now > new Date(contract.expectedReturnDate);
-  const overdueDays = isOverdue 
-    ? Math.ceil((now - new Date(contract.expectedReturnDate)) / (1000 * 60 * 60 * 24))
+  const startDate = new Date(contract.startDate);
+  const expectedReturnDate = new Date(contract.expectedReturnDate);
+  
+  // Calculate actual days used
+  const actualDaysUsed = Math.max(1, Math.ceil((now - startDate) / (1000 * 60 * 60 * 24)));
+  const originalDays = Math.max(1, Math.ceil((expectedReturnDate - startDate) / (1000 * 60 * 60 * 24)));
+  
+  // Determine if this is an early return
+  const isEarlyReturn = now < expectedReturnDate;
+  const isOverdue = now > expectedReturnDate;
+  const overdueDays = isOverdue
+    ? Math.ceil((now - expectedReturnDate) / (1000 * 60 * 60 * 24))
     : 0;
 
   // Process return in transaction
   const updatedContract = await prisma.$transaction(async (tx) => {
     let totalDamageCharges = 0;
     let allItemsReturned = true;
+    let recalculatedSubtotal = 0;
+    let originalSubtotal = Number(contract.subtotal);
 
     // Process each returned item
     for (const returnItem of items) {
@@ -401,6 +421,17 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       const damageCharge = returnItem.damageCharge || 0;
 
       totalDamageCharges += damageCharge;
+
+      // Calculate this item's contribution to recalculated total
+      // Only recalculate if early return and full quantity being returned
+      if (isEarlyReturn && recalculateForEarlyReturn && returnedQty >= contractItem.quantity) {
+        // Recalculate based on actual days used
+        const itemRecalculated = Number(contractItem.dailyRate) * contractItem.quantity * actualDaysUsed;
+        recalculatedSubtotal += itemRecalculated;
+      } else {
+        // Use original subtotal for this item
+        recalculatedSubtotal += Number(contractItem.subtotal);
+      }
 
       // Update contract item
       await tx.rentalContractItem.update({
@@ -434,7 +465,7 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
             newStock: product.stockQuantity + restoreQty,
             movementType: 'RENTAL_RETURN',
             reference: contract.contractNumber,
-            notes: `Return from rental ${contract.contractNumber}`
+            notes: `Return from rental ${contract.contractNumber}${isEarlyReturn ? ' (early return)' : ''}`
           }
         });
       }
@@ -457,6 +488,13 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       }
     }
 
+    // Calculate adjustment for early return
+    let earlyReturnCredit = 0;
+    if (isEarlyReturn && recalculateForEarlyReturn && allItemsReturned) {
+      earlyReturnCredit = originalSubtotal - recalculatedSubtotal;
+      if (earlyReturnCredit < 0) earlyReturnCredit = 0; // Safety check
+    }
+
     // Determine new status
     let newStatus = contract.status;
     if (allItemsReturned) {
@@ -465,6 +503,15 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       newStatus = 'PARTIALLY_RETURNED';
     }
 
+    // Calculate new totals
+    const newSubtotal = isEarlyReturn && recalculateForEarlyReturn && allItemsReturned
+      ? recalculatedSubtotal
+      : Number(contract.subtotal);
+    
+    const newTotalDue = newSubtotal + Number(contract.taxAmount) + penaltyAmount + totalDamageCharges;
+    const depositReturnedAmount = depositReturned !== undefined ? Number(depositReturned) : 0;
+    const newBalanceDue = newTotalDue - Number(contract.totalPaid) - depositReturnedAmount + Number(contract.depositAmount);
+
     // Update contract
     const updated = await tx.rentalContract.update({
       where: { id: contractId },
@@ -472,14 +519,17 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
         status: newStatus,
         actualReturnDate: allItemsReturned ? now : null,
         returnedBy: userId,
-        returnNotes,
+        returnNotes: isEarlyReturn && earlyReturnCredit > 0
+          ? `${returnNotes || ''}\n[Early Return Credit: ${contract.business?.currency || '$'}${earlyReturnCredit.toFixed(2)} - Actual days: ${actualDaysUsed} of ${originalDays}]`.trim()
+          : returnNotes,
         damageNotes,
-        penaltyAmount: { increment: penaltyAmount },
-        damageCharges: { increment: totalDamageCharges },
-        depositReturned: depositReturned !== undefined ? depositReturned : null,
-        balanceDue: {
-          increment: penaltyAmount + totalDamageCharges + additionalCharges - (depositReturned || 0)
-        }
+        rentalDays: allItemsReturned ? actualDaysUsed : contract.rentalDays,
+        subtotal: newSubtotal,
+        penaltyAmount: Number(contract.penaltyAmount) + penaltyAmount,
+        damageCharges: Number(contract.damageCharges) + totalDamageCharges,
+        depositReturned: depositReturned !== undefined ? depositReturned : contract.depositReturned,
+        totalDue: newTotalDue,
+        balanceDue: Math.max(0, newBalanceDue)
       },
       include: {
         customer: true,
@@ -502,9 +552,15 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
         changes: JSON.stringify({
           contractNumber: contract.contractNumber,
           returnedItems: items.length,
+          isEarlyReturn,
+          actualDaysUsed: isEarlyReturn ? actualDaysUsed : null,
+          originalDays: isEarlyReturn ? originalDays : null,
+          earlyReturnCredit: isEarlyReturn ? earlyReturnCredit : 0,
           penaltyAmount,
           damageCharges: totalDamageCharges,
-          newStatus
+          newStatus,
+          newSubtotal,
+          newTotalDue
         })
       }
     });
