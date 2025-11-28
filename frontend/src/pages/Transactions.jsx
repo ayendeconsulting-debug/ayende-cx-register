@@ -258,7 +258,7 @@ const Transactions = () => {
           ${transaction.discount > 0 ? `
             <div class="total-row">
               <span>Discount:</span>
-              <span>-$${formatCurrency(transaction.discount)}</span>
+              <span>-${formatCurrency(transaction.discount)}</span>
             </div>
           ` : ''}
           ${transaction.loyaltyPointsRedeemed > 0 ? `
@@ -417,7 +417,7 @@ const Transactions = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-800">${formatCurrency(stats.totalRevenue)}</p>
+              <p className="text-2xl font-bold text-gray-800">{formatCurrency(stats.totalRevenue)}</p>
             </div>
             <DollarSign className="w-10 h-10 text-green-500" />
           </div>
@@ -427,7 +427,7 @@ const Transactions = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Avg Transaction</p>
-              <p className="text-2xl font-bold text-gray-800">${formatCurrency(stats.averageTransaction)}</p>
+              <p className="text-2xl font-bold text-gray-800">{formatCurrency(stats.averageTransaction)}</p>
             </div>
             <DollarSign className="w-10 h-10 text-purple-500" />
           </div>
@@ -599,7 +599,7 @@ const Transactions = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      ${formatCurrency(transaction.total)}
+                      {formatCurrency(transaction.total)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-1">
@@ -763,7 +763,7 @@ const Transactions = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium text-gray-900">${formatCurrency(selectedTransaction.subtotal)}</span>
+                    <span className="font-medium text-gray-900">{formatCurrency(selectedTransaction.subtotal)}</span>
                   </div>
                   {selectedTransaction.discount > 0 && (
                     <div className="flex justify-between text-sm text-orange-600">
@@ -783,7 +783,7 @@ const Transactions = () => {
                   </div>
                   <div className="flex justify-between text-lg font-bold border-t pt-2 mt-2">
                     <span>Total:</span>
-                    <span>${formatCurrency(selectedTransaction.total)}</span>
+                    <span>{formatCurrency(selectedTransaction.total)}</span>
                   </div>
                 </div>
               </div>
