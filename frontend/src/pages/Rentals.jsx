@@ -19,7 +19,9 @@ import {
   FileText,
   Truck,
   ChevronDown,
-  RefreshCw
+  RefreshCw,
+  CreditCard,
+  Wallet
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import rentalService from '../services/rentalService';
@@ -48,6 +50,8 @@ const Rentals = () => {
     startDate: new Date().toISOString().split('T')[0],
     expectedReturnDate: '',
     depositAmount: 0,
+    rentalPaymentUpfront: 0,  // NEW: Payment towards rental at checkout
+    payFullUpfront: false,     // NEW: Toggle to pay full rental upfront
     contactPhone: '',
     contactEmail: '',
     deliveryAddress: '',
@@ -146,8 +150,6 @@ const Rentals = () => {
     fetchRentals();
   };
 
-  
-
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -172,6 +174,8 @@ const Rentals = () => {
       startDate: new Date().toISOString().split('T')[0],
       expectedReturnDate: '',
       depositAmount: 0,
+      rentalPaymentUpfront: 0,
+      payFullUpfront: false,
       contactPhone: '',
       contactEmail: '',
       deliveryAddress: '',
@@ -220,19 +224,40 @@ const Rentals = () => {
     }));
   };
 
-  const calculateRentalTotal = () => {
+  const calculateRentalDays = () => {
     if (!rentalForm.startDate || !rentalForm.expectedReturnDate) return 0;
-    
     const start = new Date(rentalForm.startDate);
     const end = new Date(rentalForm.expectedReturnDate);
-    const days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
-    
+    return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+  };
+
+  const calculateRentalTotal = () => {
+    if (!rentalForm.startDate || !rentalForm.expectedReturnDate) return 0;
+    const days = calculateRentalDays();
     return rentalForm.items.reduce((total, item) => {
       return total + (Number(item.dailyRate) * item.quantity * days);
     }, 0);
   };
 
-  // ENHANCED: Early Return Calculation Summary
+  // NEW: Calculate checkout summary
+  const calculateCheckoutSummary = () => {
+    const rentalCharges = calculateRentalTotal();
+    const deposit = Number(rentalForm.depositAmount) || 0;
+    const rentalPayment = rentalForm.payFullUpfront ? rentalCharges : (Number(rentalForm.rentalPaymentUpfront) || 0);
+    const totalToCollect = deposit + rentalPayment;
+    const balanceAfterCheckout = rentalCharges - rentalPayment;
+    
+    return {
+      rentalCharges,
+      deposit,
+      rentalPayment,
+      totalToCollect,
+      balanceAfterCheckout,
+      rentalDays: calculateRentalDays()
+    };
+  };
+
+  // FIXED: Early Return Calculation Summary
   const calculateEarlyReturnSummary = () => {
     if (!selectedRental) return null;
     
@@ -248,13 +273,15 @@ const Rentals = () => {
     const isOverdue = today > expectedReturnDate;
     const overdueDays = isOverdue ? Math.ceil((today - expectedReturnDate) / (1000 * 60 * 60 * 24)) : 0;
     
-    // Calculate original subtotal from contract
+    // Get financial values from contract
     const originalSubtotal = Number(selectedRental.subtotal) || 0;
+    const depositAmount = Number(selectedRental.depositAmount) || 0;
+    const rentalPaymentUpfront = Number(selectedRental.rentalPaymentUpfront) || 0;
+    const taxAmount = Number(selectedRental.taxAmount) || 0;
     
     // Calculate recalculated subtotal based on actual days
     let recalculatedSubtotal = 0;
     if (isEarlyReturn) {
-      // Sum up each item's cost for actual days
       returnForm.items.forEach(item => {
         const dailyRate = Number(item.dailyRate) || 0;
         const qty = Number(item.quantity) || 0;
@@ -264,25 +291,28 @@ const Rentals = () => {
       recalculatedSubtotal = originalSubtotal;
     }
     
-    // Calculate early return credit
-    const earlyReturnCredit = isEarlyReturn ? Math.max(0, originalSubtotal - recalculatedSubtotal) : 0;
-    
     // Calculate total damage charges from form
     const totalDamageCharges = returnForm.items.reduce((sum, item) => sum + (Number(item.damageCharge) || 0), 0);
     
-    // Calculate deposit to return
-    const depositReturned = Number(returnForm.depositReturned) || 0;
-    const originalDeposit = Number(selectedRental.depositAmount) || 0;
+    // FIXED CALCULATION:
+    // Actual rental charges = recalculated subtotal + tax + damage charges
+    const actualRentalCharges = recalculatedSubtotal + taxAmount + totalDamageCharges;
     
-    // Calculate final amounts
-    const newSubtotal = isEarlyReturn ? recalculatedSubtotal : originalSubtotal;
-    const taxAmount = Number(selectedRental.taxAmount) || 0;
-    const newTotalDue = newSubtotal + taxAmount + totalDamageCharges;
-    const totalPaid = Number(selectedRental.totalPaid) || 0;
+    // Amount already paid towards rental (not deposit)
+    const alreadyPaidTowardsRental = rentalPaymentUpfront;
     
-    // Amount to refund or collect
-    const balanceBeforeReturn = newTotalDue - totalPaid;
-    const netRefund = depositReturned - balanceBeforeReturn - totalDamageCharges + earlyReturnCredit;
+    // Remaining rental balance
+    const rentalBalanceDue = Math.max(0, actualRentalCharges - alreadyPaidTowardsRental);
+    
+    // Deposit refund calculation:
+    // If rental not fully paid, deduct from deposit
+    const depositUsedForRental = Math.min(depositAmount, rentalBalanceDue);
+    const depositRefund = depositAmount - depositUsedForRental;
+    
+    // Net result for customer
+    // Positive = refund to customer, Negative = customer owes
+    const netRefund = depositRefund;
+    const customerOwes = Math.max(0, rentalBalanceDue - depositAmount);
     
     return {
       isEarlyReturn,
@@ -292,15 +322,17 @@ const Rentals = () => {
       overdueDays,
       originalSubtotal,
       recalculatedSubtotal,
-      earlyReturnCredit,
-      totalDamageCharges,
-      originalDeposit,
-      depositReturned,
-      newSubtotal,
+      depositAmount,
+      rentalPaymentUpfront,
       taxAmount,
-      newTotalDue,
-      totalPaid,
-      netRefund
+      totalDamageCharges,
+      actualRentalCharges,
+      alreadyPaidTowardsRental,
+      rentalBalanceDue,
+      depositUsedForRental,
+      depositRefund,
+      netRefund,
+      customerOwes
     };
   };
 
@@ -321,11 +353,14 @@ const Rentals = () => {
     }
 
     try {
+      const checkoutSummary = calculateCheckoutSummary();
+      
       const payload = {
         customerId: rentalForm.customerId,
         startDate: rentalForm.startDate,
         expectedReturnDate: rentalForm.expectedReturnDate,
         depositAmount: Number(rentalForm.depositAmount) || 0,
+        rentalPaymentUpfront: checkoutSummary.rentalPayment,  // NEW field
         contactPhone: rentalForm.contactPhone,
         contactEmail: rentalForm.contactEmail,
         deliveryAddress: rentalForm.deliveryAddress,
@@ -365,7 +400,7 @@ const Rentals = () => {
         itemId: item.id,
         productName: item.productName,
         quantity: item.quantity,
-        dailyRate: item.dailyRate,  // Include dailyRate for early return calculation
+        dailyRate: item.dailyRate,
         returnedQuantity: item.quantity - item.returnedQuantity,
         damagedQuantity: 0,
         missingQuantity: 0,
@@ -392,6 +427,8 @@ const Rentals = () => {
     e.preventDefault();
     
     try {
+      const summary = calculateEarlyReturnSummary();
+      
       const payload = {
         items: returnForm.items.map(item => ({
           itemId: item.itemId,
@@ -403,7 +440,7 @@ const Rentals = () => {
         })),
         returnNotes: returnForm.returnNotes,
         damageNotes: returnForm.damageNotes,
-        depositReturned: Number(returnForm.depositReturned) || 0
+        depositReturned: summary?.depositRefund || 0
       };
 
       await rentalService.processReturn(selectedRental.id, payload);
@@ -690,10 +727,10 @@ const Rentals = () => {
         )}
       </div>
 
-      {/* New Rental Modal */}
+      {/* New Rental Modal - ENHANCED with Payment at Checkout */}
       {showNewRentalModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-gray-800">Create New Rental</h2>
@@ -731,8 +768,8 @@ const Rentals = () => {
                   </select>
                 </div>
 
-                {/* Date Range */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Date Range with Days Display */}
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Start Date *
@@ -757,6 +794,19 @@ const Rentals = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Rental Duration
+                    </label>
+                    <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                      <span className="text-2xl font-bold text-blue-600">
+                        {calculateRentalDays()}
+                      </span>
+                      <span className="text-sm text-blue-600 ml-1">
+                        day{calculateRentalDays() !== 1 ? 's' : ''}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -832,15 +882,15 @@ const Rentals = () => {
                           <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Product</th>
                           <th className="px-4 py-2 text-center text-sm font-medium text-gray-600">Qty</th>
                           <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Daily Rate</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">Subtotal</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-600">
+                            Subtotal ({calculateRentalDays()} days)
+                          </th>
                           <th className="px-4 py-2"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {rentalForm.items.map(item => {
-                          const days = rentalForm.startDate && rentalForm.expectedReturnDate
-                            ? Math.max(1, Math.ceil((new Date(rentalForm.expectedReturnDate) - new Date(rentalForm.startDate)) / (1000 * 60 * 60 * 24)))
-                            : 1;
+                          const days = calculateRentalDays();
                           return (
                             <tr key={item.productId}>
                               <td className="px-4 py-2 font-medium">{item.productName}</td>
@@ -871,31 +921,115 @@ const Rentals = () => {
                           );
                         })}
                       </tbody>
-                      <tfoot className="bg-gray-50">
-                        <tr>
-                          <td colSpan="3" className="px-4 py-2 text-right font-medium">Total:</td>
-                          <td className="px-4 py-2 text-right font-bold text-lg">{formatCurrency(calculateRentalTotal())}</td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
                     </table>
                   </div>
                 )}
 
-                {/* Deposit */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Deposit Amount
-                  </label>
-                  <input
-                    type="number"
-                    value={rentalForm.depositAmount}
-                    onChange={(e) => setRentalForm(prev => ({ ...prev, depositAmount: e.target.value }))}
-                    min="0"
-                    step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                {/* Payment Section - ENHANCED */}
+                {rentalForm.items.length > 0 && (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <Wallet className="w-5 h-5 text-blue-600" />
+                      Payment at Checkout
+                    </h3>
+                    
+                    {(() => {
+                      const summary = calculateCheckoutSummary();
+                      return (
+                        <div className="space-y-4">
+                          {/* Rental Charges Display */}
+                          <div className="bg-white rounded-lg p-4 shadow-sm">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-gray-600">Rental Charges ({summary.rentalDays} days)</span>
+                              <span className="text-xl font-bold text-gray-800">{formatCurrency(summary.rentalCharges)}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Deposit Input */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Security Deposit (Collateral)
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+                                <input
+                                  type="number"
+                                  value={rentalForm.depositAmount}
+                                  onChange={(e) => setRentalForm(prev => ({ ...prev, depositAmount: e.target.value }))}
+                                  min="0"
+                                  step="0.01"
+                                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">Refundable upon return</p>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Rental Payment Upfront
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+                                <input
+                                  type="number"
+                                  value={rentalForm.payFullUpfront ? summary.rentalCharges : rentalForm.rentalPaymentUpfront}
+                                  onChange={(e) => setRentalForm(prev => ({ 
+                                    ...prev, 
+                                    rentalPaymentUpfront: e.target.value,
+                                    payFullUpfront: false 
+                                  }))}
+                                  min="0"
+                                  max={summary.rentalCharges}
+                                  step="0.01"
+                                  disabled={rentalForm.payFullUpfront}
+                                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <label className="flex items-center gap-2 mt-2">
+                                <input
+                                  type="checkbox"
+                                  checked={rentalForm.payFullUpfront}
+                                  onChange={(e) => setRentalForm(prev => ({ 
+                                    ...prev, 
+                                    payFullUpfront: e.target.checked,
+                                    rentalPaymentUpfront: e.target.checked ? summary.rentalCharges : 0
+                                  }))}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-600">Pay full rental upfront</span>
+                              </label>
+                            </div>
+                          </div>
+                          
+                          {/* Summary */}
+                          <div className="bg-white rounded-lg p-4 shadow-sm space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Security Deposit</span>
+                              <span className="font-medium">{formatCurrency(summary.deposit)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Rental Payment</span>
+                              <span className="font-medium">{formatCurrency(summary.rentalPayment)}</span>
+                            </div>
+                            <div className="border-t pt-2 flex justify-between text-lg font-bold">
+                              <span>Total to Collect Now</span>
+                              <span className="text-blue-600">{formatCurrency(summary.totalToCollect)}</span>
+                            </div>
+                            {summary.balanceAfterCheckout > 0 && (
+                              <div className="flex justify-between text-sm text-orange-600">
+                                <span>Balance Due at Return</span>
+                                <span className="font-medium">{formatCurrency(summary.balanceAfterCheckout)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Buttons */}
                 <div className="flex justify-end gap-3 pt-4 border-t">
@@ -908,8 +1042,10 @@ const Rentals = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    disabled={rentalForm.items.length === 0}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                   >
+                    <FileText className="w-4 h-4" />
                     Create Rental Contract
                   </button>
                 </div>
@@ -1002,16 +1138,20 @@ const Rentals = () => {
               <div className="bg-gray-50 p-4 rounded-lg mb-6">
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-600">Rental Charges</span>
                     <span>{formatCurrency(selectedRental.subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Tax</span>
                     <span>{formatCurrency(selectedRental.taxAmount)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Deposit</span>
+                  <div className="border-t pt-2 flex justify-between">
+                    <span className="text-gray-600">Security Deposit (Held)</span>
                     <span>{formatCurrency(selectedRental.depositAmount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Rental Paid Upfront</span>
+                    <span>{formatCurrency(selectedRental.rentalPaymentUpfront || 0)}</span>
                   </div>
                   {Number(selectedRental.penaltyAmount) > 0 && (
                     <div className="flex justify-between text-red-600">
@@ -1030,13 +1170,15 @@ const Rentals = () => {
                     <span>{formatCurrency(selectedRental.totalDue)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Paid</span>
+                    <span className="text-gray-600">Total Collected</span>
                     <span>{formatCurrency(selectedRental.totalPaid)}</span>
                   </div>
-                  <div className="flex justify-between font-medium text-red-600">
-                    <span>Balance Due</span>
-                    <span>{formatCurrency(selectedRental.balanceDue)}</span>
-                  </div>
+                  {Number(selectedRental.balanceDue) > 0 && (
+                    <div className="flex justify-between font-medium text-red-600">
+                      <span>Balance Due</span>
+                      <span>{formatCurrency(selectedRental.balanceDue)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1066,7 +1208,7 @@ const Rentals = () => {
         </div>
       )}
 
-      {/* Return Modal - ENHANCED with Early Return Calculation */}
+      {/* Return Modal - FIXED Calculation */}
       {showReturnModal && selectedRental && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
@@ -1082,7 +1224,7 @@ const Rentals = () => {
               </div>
 
               <form onSubmit={handleProcessReturn} className="space-y-6">
-                {/* Early Return Summary Card */}
+                {/* Return Summary Card - FIXED */}
                 {(() => {
                   const summary = calculateEarlyReturnSummary();
                   if (!summary) return null;
@@ -1093,7 +1235,7 @@ const Rentals = () => {
                         {summary.isEarlyReturn ? (
                           <>
                             <CheckCircle className="w-5 h-5 text-green-600" />
-                            Early Return - Customer Credit Available
+                            Early Return - {summary.originalDays - summary.actualDays} Day(s) Early
                           </>
                         ) : summary.isOverdue ? (
                           <>
@@ -1108,14 +1250,13 @@ const Rentals = () => {
                         )}
                       </h3>
                       
+                      {/* Days Summary */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        {/* Original Rental Period */}
                         <div className="bg-white rounded-lg p-3 shadow-sm">
                           <p className="text-xs text-gray-500 uppercase tracking-wide">Original Period</p>
                           <p className="text-xl font-bold text-gray-800">{summary.originalDays} days</p>
                         </div>
                         
-                        {/* Actual Days */}
                         <div className="bg-white rounded-lg p-3 shadow-sm">
                           <p className="text-xs text-gray-500 uppercase tracking-wide">Actual Days Used</p>
                           <p className={`text-xl font-bold ${summary.isEarlyReturn ? 'text-green-600' : summary.isOverdue ? 'text-red-600' : 'text-gray-800'}`}>
@@ -1123,40 +1264,28 @@ const Rentals = () => {
                           </p>
                         </div>
                         
-                        {/* Original Amount */}
                         <div className="bg-white rounded-lg p-3 shadow-sm">
                           <p className="text-xs text-gray-500 uppercase tracking-wide">Original Amount</p>
                           <p className="text-xl font-bold text-gray-800">{formatCurrency(summary.originalSubtotal)}</p>
                         </div>
                         
-                        {/* Recalculated/Credit */}
-                        {summary.isEarlyReturn ? (
-                          <div className="bg-white rounded-lg p-3 shadow-sm">
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">Recalculated Amount</p>
-                            <p className="text-xl font-bold text-green-600">{formatCurrency(summary.recalculatedSubtotal)}</p>
-                          </div>
-                        ) : (
-                          <div className="bg-white rounded-lg p-3 shadow-sm">
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">Final Amount</p>
-                            <p className="text-xl font-bold text-gray-800">{formatCurrency(summary.newSubtotal)}</p>
-                          </div>
-                        )}
+                        <div className="bg-white rounded-lg p-3 shadow-sm">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">
+                            {summary.isEarlyReturn ? 'Adjusted Amount' : 'Rental Amount'}
+                          </p>
+                          <p className={`text-xl font-bold ${summary.isEarlyReturn ? 'text-green-600' : 'text-gray-800'}`}>
+                            {formatCurrency(summary.recalculatedSubtotal)}
+                          </p>
+                        </div>
                       </div>
                       
-                      {/* Financial Summary */}
+                      {/* Financial Summary - FIXED */}
                       <div className="bg-white rounded-lg p-4 shadow-sm">
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Rental Charges ({summary.isEarlyReturn ? `${summary.actualDays} days` : `${summary.originalDays} days`})</span>
-                            <span className="font-medium">{formatCurrency(summary.isEarlyReturn ? summary.recalculatedSubtotal : summary.originalSubtotal)}</span>
+                            <span className="text-gray-600">Rental Charges ({summary.actualDays} days)</span>
+                            <span className="font-medium">{formatCurrency(summary.recalculatedSubtotal)}</span>
                           </div>
-                          
-                          {summary.isEarlyReturn && summary.earlyReturnCredit > 0 && (
-                            <div className="flex justify-between text-green-600">
-                              <span>Early Return Credit ({summary.originalDays - summary.actualDays} unused days)</span>
-                              <span className="font-medium">-{formatCurrency(summary.earlyReturnCredit)}</span>
-                            </div>
-                          )}
                           
                           {summary.taxAmount > 0 && (
                             <div className="flex justify-between">
@@ -1172,20 +1301,46 @@ const Rentals = () => {
                             </div>
                           )}
                           
-                          <div className="border-t pt-2 flex justify-between">
-                            <span className="text-gray-600">Already Paid (Deposit)</span>
-                            <span className="font-medium">{formatCurrency(summary.totalPaid)}</span>
+                          <div className="border-t pt-2 flex justify-between font-medium">
+                            <span>Total Rental Due</span>
+                            <span>{formatCurrency(summary.actualRentalCharges)}</span>
+                          </div>
+                          
+                          <div className="flex justify-between text-gray-600">
+                            <span>Already Paid (Rental Payment)</span>
+                            <span>-{formatCurrency(summary.alreadyPaidTowardsRental)}</span>
                           </div>
                           
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Deposit to Return</span>
-                            <span className="font-medium">{formatCurrency(summary.depositReturned)}</span>
+                            <span className="text-gray-600">Rental Balance</span>
+                            <span className={`font-medium ${summary.rentalBalanceDue > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                              {formatCurrency(summary.rentalBalanceDue)}
+                            </span>
                           </div>
                           
-                          <div className={`border-t pt-2 flex justify-between text-lg font-bold ${summary.netRefund >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            <span>{summary.netRefund >= 0 ? 'Refund to Customer' : 'Customer Owes'}</span>
-                            <span>{formatCurrency(Math.abs(summary.netRefund))}</span>
+                          <div className="border-t pt-2 flex justify-between">
+                            <span className="text-gray-600">Security Deposit Held</span>
+                            <span className="font-medium">{formatCurrency(summary.depositAmount)}</span>
                           </div>
+                          
+                          {summary.depositUsedForRental > 0 && (
+                            <div className="flex justify-between text-orange-600">
+                              <span>Deposit Used for Rental Balance</span>
+                              <span className="font-medium">-{formatCurrency(summary.depositUsedForRental)}</span>
+                            </div>
+                          )}
+                          
+                          <div className={`border-t pt-2 flex justify-between text-lg font-bold ${summary.depositRefund > 0 ? 'text-green-600' : 'text-gray-800'}`}>
+                            <span>Deposit to Refund</span>
+                            <span>{formatCurrency(summary.depositRefund)}</span>
+                          </div>
+                          
+                          {summary.customerOwes > 0 && (
+                            <div className="flex justify-between text-lg font-bold text-red-600">
+                              <span>Customer Still Owes</span>
+                              <span>{formatCurrency(summary.customerOwes)}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1284,22 +1439,6 @@ const Rentals = () => {
                       placeholder="Details about any damages..."
                     />
                   </div>
-                </div>
-
-                {/* Deposit Return */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Deposit to Return (Original: {formatCurrency(selectedRental.depositAmount)})
-                  </label>
-                  <input
-                    type="number"
-                    value={returnForm.depositReturned}
-                    onChange={(e) => setReturnForm(prev => ({ ...prev, depositReturned: parseFloat(e.target.value) || 0 }))}
-                    min="0"
-                    max={Number(selectedRental.depositAmount)}
-                    step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
                 </div>
 
                 {/* Buttons */}

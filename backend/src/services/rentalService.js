@@ -40,6 +40,12 @@ const calculateRentalDays = (startDate, endDate) => {
 
 /**
  * Create a new rental contract
+ * 
+ * UPDATED: Now properly handles:
+ * - depositAmount: Security deposit (collateral - fully refundable if no damage)
+ * - rentalPaymentUpfront: Payment towards rental charges at checkout
+ * - totalPaid: depositAmount + rentalPaymentUpfront
+ * - balanceDue: subtotal + taxAmount - rentalPaymentUpfront
  */
 export const createRentalContract = async (businessId, data, userId) => {
   const {
@@ -48,6 +54,7 @@ export const createRentalContract = async (businessId, data, userId) => {
     startDate,
     expectedReturnDate,
     depositAmount,
+    rentalPaymentUpfront = 0,  // NEW: Payment towards rental at checkout
     contactPhone,
     contactEmail,
     deliveryAddress,
@@ -106,6 +113,16 @@ export const createRentalContract = async (businessId, data, userId) => {
   const taxRate = business.taxEnabled ? Number(business.taxRate) : 0;
   const taxAmount = subtotal * taxRate;
   const totalDue = subtotal + taxAmount;
+  
+  // UPDATED: Proper calculation
+  // depositAmount = Security deposit (collateral)
+  // rentalPaymentUpfront = Payment towards rental charges
+  // totalPaid = depositAmount + rentalPaymentUpfront (total collected at checkout)
+  // balanceDue = rental charges not yet paid
+  const deposit = Number(depositAmount) || 0;
+  const rentalPayment = Number(rentalPaymentUpfront) || 0;
+  const totalPaid = deposit + rentalPayment;
+  const balanceDue = totalDue - rentalPayment;  // Only rental payment reduces balance, not deposit
 
   // Generate contract number
   const contractNumber = await generateContractNumber(businessId);
@@ -124,10 +141,11 @@ export const createRentalContract = async (businessId, data, userId) => {
         rentalDays,
         subtotal,
         taxAmount,
-        depositAmount: depositAmount || 0,
+        depositAmount: deposit,
+        rentalPaymentUpfront: rentalPayment,  // NEW field
         totalDue,
-        totalPaid: depositAmount || 0,
-        balanceDue: totalDue - (depositAmount || 0),
+        totalPaid,
+        balanceDue,
         currency: business.currency,
         currencyCode: business.currencyCode,
         status: 'ACTIVE',
@@ -180,7 +198,11 @@ export const createRentalContract = async (businessId, data, userId) => {
           contractNumber: newContract.contractNumber,
           customerId,
           itemCount: validatedItems.length,
-          totalDue
+          subtotal,
+          depositAmount: deposit,
+          rentalPaymentUpfront: rentalPayment,
+          totalDue,
+          balanceDue
         })
       }
     });
@@ -355,10 +377,13 @@ export const getOverdueRentals = async (businessId) => {
 };
 
 /**
- * Process rental return - ENHANCED with Early Return Recalculation
+ * Process rental return - FIXED with correct deposit/payment handling
  * 
- * Key Enhancement: When items are returned EARLY, the system recalculates the total
- * based on actual rental days instead of the original expected duration.
+ * Key Logic:
+ * - Deposit is COLLATERAL (fully refundable if no damage)
+ * - Rental charges are deducted from deposit OR paid separately
+ * - Early return: recalculate rental based on actual days
+ * - Customer refund = Deposit - Actual Rental Charges - Damage Charges + Any Overpayment
  */
 export const processRentalReturn = async (businessId, contractId, returnData, userId) => {
   const {
@@ -367,7 +392,7 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
     damageNotes,
     depositReturned,
     additionalCharges = 0,
-    recalculateForEarlyReturn = true  // New option - default true
+    recalculateForEarlyReturn = true
   } = returnData;
 
   const contract = await prisma.rentalContract.findFirst({
@@ -488,13 +513,6 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       }
     }
 
-    // Calculate adjustment for early return
-    let earlyReturnCredit = 0;
-    if (isEarlyReturn && recalculateForEarlyReturn && allItemsReturned) {
-      earlyReturnCredit = originalSubtotal - recalculatedSubtotal;
-      if (earlyReturnCredit < 0) earlyReturnCredit = 0; // Safety check
-    }
-
     // Determine new status
     let newStatus = contract.status;
     if (allItemsReturned) {
@@ -503,14 +521,42 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       newStatus = 'PARTIALLY_RETURNED';
     }
 
-    // Calculate new totals
-    const newSubtotal = isEarlyReturn && recalculateForEarlyReturn && allItemsReturned
-      ? recalculatedSubtotal
-      : Number(contract.subtotal);
+    // FIXED CALCULATION LOGIC
+    // =======================
+    // Get financial values
+    const depositAmount = Number(contract.depositAmount) || 0;
+    const rentalPaymentUpfront = Number(contract.rentalPaymentUpfront) || 0;
+    const taxAmount = Number(contract.taxAmount) || 0;
     
-    const newTotalDue = newSubtotal + Number(contract.taxAmount) + penaltyAmount + totalDamageCharges;
-    const depositReturnedAmount = depositReturned !== undefined ? Number(depositReturned) : 0;
-    const newBalanceDue = newTotalDue - Number(contract.totalPaid) - depositReturnedAmount + Number(contract.depositAmount);
+    // Calculate actual rental charges
+    const actualSubtotal = isEarlyReturn && recalculateForEarlyReturn && allItemsReturned
+      ? recalculatedSubtotal
+      : originalSubtotal;
+    
+    // Total charges = rental + tax + penalties + damage
+    const totalCharges = actualSubtotal + taxAmount + penaltyAmount + totalDamageCharges;
+    
+    // Amount already paid towards rental (not deposit)
+    const alreadyPaidTowardsRental = rentalPaymentUpfront;
+    
+    // Remaining rental balance (what customer still owes for rental)
+    const rentalBalanceDue = Math.max(0, totalCharges - alreadyPaidTowardsRental);
+    
+    // Deposit to return calculation:
+    // If rental not fully paid upfront, deduct from deposit
+    // depositRefund = deposit - unpaid rental charges
+    const depositToReturn = depositReturned !== undefined 
+      ? Number(depositReturned)
+      : Math.max(0, depositAmount - rentalBalanceDue);
+    
+    // Build return notes
+    let finalReturnNotes = returnNotes || '';
+    if (isEarlyReturn && allItemsReturned) {
+      const savedAmount = originalSubtotal - actualSubtotal;
+      if (savedAmount > 0) {
+        finalReturnNotes = `${finalReturnNotes}\n[Early Return: ${actualDaysUsed} of ${originalDays} days used. Rental adjusted from ${contract.business?.currency || '$'}${originalSubtotal.toFixed(2)} to ${contract.business?.currency || '$'}${actualSubtotal.toFixed(2)}]`.trim();
+      }
+    }
 
     // Update contract
     const updated = await tx.rentalContract.update({
@@ -519,17 +565,15 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
         status: newStatus,
         actualReturnDate: allItemsReturned ? now : null,
         returnedBy: userId,
-        returnNotes: isEarlyReturn && earlyReturnCredit > 0
-          ? `${returnNotes || ''}\n[Early Return Credit: ${contract.business?.currency || '$'}${earlyReturnCredit.toFixed(2)} - Actual days: ${actualDaysUsed} of ${originalDays}]`.trim()
-          : returnNotes,
+        returnNotes: finalReturnNotes,
         damageNotes,
         rentalDays: allItemsReturned ? actualDaysUsed : contract.rentalDays,
-        subtotal: newSubtotal,
+        subtotal: actualSubtotal,
         penaltyAmount: Number(contract.penaltyAmount) + penaltyAmount,
         damageCharges: Number(contract.damageCharges) + totalDamageCharges,
-        depositReturned: depositReturned !== undefined ? depositReturned : contract.depositReturned,
-        totalDue: newTotalDue,
-        balanceDue: Math.max(0, newBalanceDue)
+        depositReturned: depositToReturn,
+        totalDue: totalCharges,
+        balanceDue: Math.max(0, rentalBalanceDue - (depositAmount - depositToReturn))
       },
       include: {
         customer: true,
@@ -553,14 +597,17 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
           contractNumber: contract.contractNumber,
           returnedItems: items.length,
           isEarlyReturn,
-          actualDaysUsed: isEarlyReturn ? actualDaysUsed : null,
-          originalDays: isEarlyReturn ? originalDays : null,
-          earlyReturnCredit: isEarlyReturn ? earlyReturnCredit : 0,
+          actualDaysUsed,
+          originalDays,
+          originalSubtotal,
+          actualSubtotal,
+          rentalPaymentUpfront,
+          depositAmount,
+          depositToReturn,
           penaltyAmount,
           damageCharges: totalDamageCharges,
-          newStatus,
-          newSubtotal,
-          newTotalDue
+          totalCharges,
+          newStatus
         })
       }
     });
@@ -729,7 +776,8 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
       totalPaid: true,
       penaltyAmount: true,
       damageCharges: true,
-      depositAmount: true
+      depositAmount: true,
+      rentalPaymentUpfront: true
     },
     _count: { id: true }
   });
@@ -788,6 +836,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
       tax: revenueTotals._sum.taxAmount || 0,
       totalRevenue: revenueTotals._sum.totalDue || 0,
       totalCollected: revenueTotals._sum.totalPaid || 0,
+      rentalPaymentsUpfront: revenueTotals._sum.rentalPaymentUpfront || 0,
       penalties: revenueTotals._sum.penaltyAmount || 0,
       damageCharges: revenueTotals._sum.damageCharges || 0,
       deposits: revenueTotals._sum.depositAmount || 0

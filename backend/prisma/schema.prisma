@@ -608,6 +608,7 @@ model RentalContract {
   subtotal           Decimal              @db.Decimal(10, 2)
   taxAmount          Decimal              @default(0) @db.Decimal(10, 2)
   depositAmount      Decimal              @db.Decimal(10, 2)
+  rentalPaymentUpfront Decimal @default(0) @db.Decimal(10, 2)
   depositReturned    Decimal?             @db.Decimal(10, 2)
   penaltyAmount      Decimal              @default(0) @db.Decimal(10, 2)
   damageCharges      Decimal              @default(0) @db.Decimal(10, 2)
