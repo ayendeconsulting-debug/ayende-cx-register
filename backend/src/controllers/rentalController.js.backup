@@ -1,29 +1,6 @@
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { successResponse, createdResponse, paginatedResponse } from '../utils/response.js';
 import * as rentalService from '../services/rentalService.js';
-import * as syncQueueService from '../services/syncQueueService.js';
-
-/**
- * Queue rental for CRM sync
- * @param {string} rentalId - Rental contract ID
- * @param {string} businessId - Business ID  
- * @param {string} operation - 'CREATE', 'UPDATE', 'RETURN', 'CLOSE', 'CANCEL'
- */
-const queueRentalForSync = async (rentalId, businessId, operation = 'CREATE') => {
-  try {
-    await syncQueueService.addToQueue({
-      businessId,
-      entityType: 'rental',
-      entityId: rentalId,
-      operation,
-      priority: operation === 'CREATE' ? 'NORMAL' : 'HIGH',  // Returns/closes get high priority
-    });
-    console.log(`[RENTAL SYNC] Queued rental ${rentalId} for sync (${operation})`);
-  } catch (error) {
-    console.error(`[RENTAL SYNC] Failed to queue rental for sync:`, error.message);
-    // Don't throw - sync failure shouldn't break rental operations
-  }
-};
 
 /**
  * @route   POST /api/v1/rentals
@@ -36,9 +13,6 @@ export const createRentalContract = asyncHandler(async (req, res) => {
     req.body,
     req.user.id
   );
-
-  // Queue for CRM sync
-  await queueRentalForSync(contract.id, req.user.businessId, 'CREATE');
 
   return createdResponse(res, contract, 'Rental contract created successfully');
 });
@@ -142,9 +116,6 @@ export const processReturn = asyncHandler(async (req, res) => {
     req.user.id
   );
 
-  // Queue for CRM sync with RETURN operation
-  await queueRentalForSync(contract.id, req.user.businessId, 'RETURN');
-
   return successResponse(res, contract, 'Rental return processed successfully');
 });
 
@@ -162,9 +133,6 @@ export const closeContract = asyncHandler(async (req, res) => {
     req.user.id,
     notes
   );
-
-  // Queue for CRM sync with CLOSE operation
-  await queueRentalForSync(contract.id, req.user.businessId, 'CLOSE');
 
   return successResponse(res, contract, 'Rental contract closed successfully');
 });
@@ -190,9 +158,6 @@ export const cancelContract = asyncHandler(async (req, res) => {
     req.user.id,
     reason
   );
-
-  // Queue for CRM sync with CANCEL operation
-  await queueRentalForSync(contract.id, req.user.businessId, 'CANCEL');
 
   return successResponse(res, contract, 'Rental contract cancelled successfully');
 });

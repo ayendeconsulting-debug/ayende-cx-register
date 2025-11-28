@@ -13,7 +13,8 @@ const MAX_RETRY_ATTEMPTS = parseInt(process.env.SYNC_RETRY_ATTEMPTS || '3');
 const syncMetrics = {
   transactionsSynced: 0,
   customersSynced: 0,
-  anonymousTransactionsSynced: 0,  // NEW: Track anonymous transactions
+  rentalsSynced: 0,  // NEW: Track rental syncs
+  anonymousTransactionsSynced: 0,
   failedSyncs: 0,
   totalSyncTime: 0,
 };
@@ -48,7 +49,7 @@ const crmApiRequest = async (endpoint, method, data, businessId) => {
   }
 
   const startTime = Date.now();
-  let tenantId;  // Declare at function level so it's accessible in catch
+  let tenantId;
 
   try {
     // Get business to access externalTenantId
@@ -61,9 +62,9 @@ const crmApiRequest = async (endpoint, method, data, businessId) => {
       throw new Error(`Business ${businessId} has no externalTenantId (CRM tenant UUID)`);
     }
 
-    tenantId = business.externalTenantId;  // Remove 'const'
+    tenantId = business.externalTenantId;
     const token = generateIntegrationToken(tenantId);
-    const url = `${CRM_API_URL}${endpoint}`;  // ADD THIS LINE
+    const url = `${CRM_API_URL}${endpoint}`;
 
     const response = await axios({
       method,
@@ -159,9 +160,6 @@ const validateBusinessRelation = (entity, entityType) => {
 /**
  * Sync transaction to CRM (Real-time)
  * Called immediately after transaction is completed in POS
- * 
- * UPDATED: Now supports anonymous transactions
- * FIXED: Line 198 - Changed customerId to tenantCustomerId
  */
 export const syncTransactionToCRM = async (transaction) => {
   if (!ENABLE_SYNC) {
@@ -171,7 +169,6 @@ export const syncTransactionToCRM = async (transaction) => {
 
   const syncStartTime = Date.now();
   
-  // NEW: Check if this is an anonymous transaction
   const isAnonymous = transaction.isAnonymousTransaction || transaction.customer?.isAnonymous || false;
   
   const transactionType = isAnonymous ? 'ANONYMOUS transaction' : 'transaction';
@@ -189,10 +186,8 @@ export const syncTransactionToCRM = async (transaction) => {
       transactionNumber: transaction.transactionNumber,
       tenantId: tenantId,
       
-      // NEW: Include anonymous flag
       isAnonymous: isAnonymous,
       
-      // FIXED: Changed customerId to tenantCustomerId (CRM expects this field name)
       tenantCustomerId: isAnonymous ? null : transaction.customerId,
       customerEmail: isAnonymous ? null : transaction.customer?.email,
       
@@ -228,22 +223,11 @@ export const syncTransactionToCRM = async (transaction) => {
       
       // Metadata
       status: transaction.status,
+      transactionType: transaction.transactionType,
       notes: transaction.notes,
       createdBy: transaction.userId,
       timestamp: transaction.createdAt.toISOString(),
     };
-
-    // DEBUG: Log the payload being sent to CRM
-    console.log('[CRM SYNC DEBUG] Transaction payload:', JSON.stringify({
-      transactionId: payload.transactionId,
-      transactionNumber: payload.transactionNumber,
-      tenantCustomerId: payload.tenantCustomerId,
-      isAnonymous: payload.isAnonymous,
-      customerId: transaction.customerId,
-      hasCustomer: !!transaction.customer,
-      customerEmail: transaction.customer?.email,
-      total: payload.total
-    }, null, 2));
 
     // Send to CRM with retry
     await retryOperation(async () => {
@@ -306,8 +290,6 @@ export const syncTransactionToCRM = async (transaction) => {
       { transactionId: transaction.id },
       error
     );
-
-    // Don't throw error - transaction creation should still complete
   }
 };
 
@@ -419,8 +401,159 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
       { customerId: customer.id },
       error
     );
+  }
+};
 
-    // Don't throw error - customer creation should still complete
+/**
+ * Sync rental contract to CRM
+ * Called when rental is created, updated, or returned
+ * 
+ * NEW: Added for rental management sync
+ */
+export const syncRentalToCRM = async (rental, operation = 'create') => {
+  if (!ENABLE_SYNC) {
+    console.log('[CRM SYNC] Rental sync disabled');
+    return;
+  }
+
+  const syncStartTime = Date.now();
+  console.log(`[CRM SYNC] Syncing rental ${rental.contractNumber} to CRM (${operation})`);
+
+  try {
+    // Validate and extract CRM tenant ID
+    const tenantId = validateBusinessRelation(rental, 'Rental');
+    
+    console.log(`[CRM SYNC] Using tenant ID: ${tenantId} (from business.externalTenantId)`);
+    
+    // Prepare payload
+    const payload = {
+      // Identifiers
+      rentalId: rental.id,
+      contractNumber: rental.contractNumber,
+      tenantId: tenantId,
+      operation: operation,  // 'create', 'update', 'return', 'close'
+      
+      // Customer reference
+      tenantCustomerId: rental.customerId,
+      customerEmail: rental.customer?.email || rental.contactEmail,
+      customerName: rental.customer 
+        ? `${rental.customer.firstName} ${rental.customer.lastName}` 
+        : null,
+      
+      // Contact info for rental period
+      contactPhone: rental.contactPhone || rental.customer?.phone,
+      contactEmail: rental.contactEmail || rental.customer?.email,
+      deliveryAddress: rental.deliveryAddress,
+      
+      // Dates
+      startDate: rental.startDate.toISOString(),
+      expectedReturnDate: rental.expectedReturnDate.toISOString(),
+      actualReturnDate: rental.actualReturnDate?.toISOString() || null,
+      rentalDays: rental.rentalDays,
+      
+      // Financial details
+      subtotal: parseFloat(rental.subtotal),
+      taxAmount: parseFloat(rental.taxAmount),
+      depositAmount: parseFloat(rental.depositAmount),
+      depositReturned: rental.depositReturned ? parseFloat(rental.depositReturned) : null,
+      penaltyAmount: parseFloat(rental.penaltyAmount || 0),
+      damageCharges: parseFloat(rental.damageCharges || 0),
+      totalDue: parseFloat(rental.totalDue),
+      totalPaid: parseFloat(rental.totalPaid || 0),
+      balanceDue: parseFloat(rental.balanceDue || 0),
+      
+      // Currency
+      currency: rental.currency || '$',
+      currencyCode: rental.currencyCode || 'CAD',
+      
+      // Status
+      status: rental.status,
+      
+      // Return details
+      returnedBy: rental.returnedBy,
+      returnNotes: rental.returnNotes,
+      damageNotes: rental.damageNotes,
+      
+      // Notification tracking
+      overdueNotified: rental.overdueNotified,
+      overdueNotifiedAt: rental.overdueNotifiedAt?.toISOString() || null,
+      reminderSent: rental.reminderSent,
+      reminderSentAt: rental.reminderSentAt?.toISOString() || null,
+      
+      // Items (products being rented)
+      items: rental.items?.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        sku: item.sku,
+        quantity: item.quantity,
+        dailyRate: parseFloat(item.dailyRate),
+        subtotal: parseFloat(item.subtotal),
+        // Return tracking
+        returnedQuantity: item.returnedQuantity || 0,
+        damagedQuantity: item.damagedQuantity || 0,
+        missingQuantity: item.missingQuantity || 0,
+        damageDescription: item.damageDescription,
+        damageCharge: parseFloat(item.damageCharge || 0),
+        returnedAt: item.returnedAt?.toISOString() || null,
+      })) || [],
+      
+      // Linked transaction (if any)
+      transactionId: rental.transactionId,
+      
+      // Timestamps
+      createdAt: rental.createdAt.toISOString(),
+      updatedAt: rental.updatedAt.toISOString(),
+      closedAt: rental.closedAt?.toISOString() || null,
+    };
+
+    // Send to CRM with retry
+    const response = await retryOperation(async () => {
+      return await crmApiRequest(
+        '/api/v1/sync/rental',
+        'POST',
+        payload,
+        rental.businessId
+      );
+    });
+
+    // Log success
+    await logSyncOperation(
+      'rental_sync',
+      'rental',
+      rental.id,
+      rental.businessId,
+      'SUCCESS',
+      payload
+    );
+
+    // Update metrics
+    syncMetrics.rentalsSynced++;
+    const syncDuration = Date.now() - syncStartTime;
+    syncMetrics.totalSyncTime += syncDuration;
+
+    console.log(`[CRM SYNC] Rental ${rental.contractNumber} synced successfully (${syncDuration}ms)`);
+    
+    return response;
+  } catch (error) {
+    const syncDuration = Date.now() - syncStartTime;
+    syncMetrics.failedSyncs++;
+    
+    console.error(`[CRM SYNC] Failed to sync rental ${rental.contractNumber} (${syncDuration}ms)`, {
+      error: error.message,
+      rentalId: rental.id,
+      tenantId: rental.business?.externalTenantId || 'missing',
+    });
+
+    // Log failure
+    await logSyncOperation(
+      'rental_sync',
+      'rental',
+      rental.id,
+      rental.businessId,
+      'FAILED',
+      { rentalId: rental.id },
+      error
+    );
   }
 };
 
@@ -538,10 +671,15 @@ export const checkCRMHealth = async (businessId) => {
  * Get sync metrics
  */
 export const getSyncMetrics = () => {
+  const totalSynced = syncMetrics.transactionsSynced + 
+                      syncMetrics.customersSynced + 
+                      syncMetrics.rentalsSynced +
+                      syncMetrics.anonymousTransactionsSynced;
+  
   return {
     ...syncMetrics,
-    averageSyncTime: syncMetrics.transactionsSynced + syncMetrics.customersSynced + syncMetrics.anonymousTransactionsSynced > 0
-      ? (syncMetrics.totalSyncTime / (syncMetrics.transactionsSynced + syncMetrics.customersSynced + syncMetrics.anonymousTransactionsSynced)).toFixed(2)
+    averageSyncTime: totalSynced > 0
+      ? (syncMetrics.totalSyncTime / totalSynced).toFixed(2)
       : 0,
   };
 };
@@ -552,6 +690,7 @@ export const getSyncMetrics = () => {
 export const resetSyncMetrics = () => {
   syncMetrics.transactionsSynced = 0;
   syncMetrics.customersSynced = 0;
+  syncMetrics.rentalsSynced = 0;
   syncMetrics.anonymousTransactionsSynced = 0;
   syncMetrics.failedSyncs = 0;
   syncMetrics.totalSyncTime = 0;
@@ -581,8 +720,6 @@ export const retryFailedSyncs = async () => {
 
     for (const syncLog of failedSyncs) {
       try {
-        const payload = JSON.parse(syncLog.payload);
-
         // Retry based on entity type
         if (syncLog.entityType === 'transaction') {
           const transaction = await prisma.transaction.findUnique({
@@ -607,6 +744,20 @@ export const retryFailedSyncs = async () => {
 
           if (customer) {
             await syncCustomerToCRM(customer);
+          }
+        } else if (syncLog.entityType === 'rental') {
+          // NEW: Handle rental retry
+          const rental = await prisma.rentalContract.findUnique({
+            where: { id: syncLog.entityId },
+            include: {
+              items: true,
+              customer: true,
+              business: true,
+            },
+          });
+
+          if (rental) {
+            await syncRentalToCRM(rental);
           }
         }
 
@@ -636,6 +787,7 @@ export const retryFailedSyncs = async () => {
 export default {
   syncTransactionToCRM,
   syncCustomerToCRM,
+  syncRentalToCRM,  // NEW export
   fetchCustomerFromCRM,
   updateCustomerFromCRM,
   checkCRMHealth,

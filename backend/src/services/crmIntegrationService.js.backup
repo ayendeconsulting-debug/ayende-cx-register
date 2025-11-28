@@ -1,17 +1,3 @@
-/**
- * CRM Integration Service
- * Handles synchronization between POS and CRM systems
- * 
- * This service sends data from POS (source of truth for transactions)
- * to CRM (source of truth for customer profiles)
- * 
- * OPTIMIZATIONS:
- * - Added business.externalTenantId for correct tenant resolution
- * - Enhanced error logging with context
- * - Added performance metrics tracking
- * - Improved validation and error messages
- */
-
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
@@ -27,6 +13,7 @@ const MAX_RETRY_ATTEMPTS = parseInt(process.env.SYNC_RETRY_ATTEMPTS || '3');
 const syncMetrics = {
   transactionsSynced: 0,
   customersSynced: 0,
+  anonymousTransactionsSynced: 0,  // NEW: Track anonymous transactions
   failedSyncs: 0,
   totalSyncTime: 0,
 };
@@ -54,17 +41,29 @@ const generateIntegrationToken = (tenantId) => {
 /**
  * Make authenticated request to CRM API
  */
-const crmApiRequest = async (endpoint, method, data, tenantId) => {
+const crmApiRequest = async (endpoint, method, data, businessId) => {
   if (!ENABLE_SYNC) {
     console.log('[CRM SYNC] Sync disabled, skipping request');
     return null;
   }
 
   const startTime = Date.now();
+  let tenantId;  // Declare at function level so it's accessible in catch
 
   try {
+    // Get business to access externalTenantId
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      select: { externalTenantId: true }
+    });
+
+    if (!business?.externalTenantId) {
+      throw new Error(`Business ${businessId} has no externalTenantId (CRM tenant UUID)`);
+    }
+
+    tenantId = business.externalTenantId;  // Remove 'const'
     const token = generateIntegrationToken(tenantId);
-    const url = `${CRM_API_URL}${endpoint}`;
+    const url = `${CRM_API_URL}${endpoint}`;  // ADD THIS LINE
 
     const response = await axios({
       method,
@@ -160,6 +159,9 @@ const validateBusinessRelation = (entity, entityType) => {
 /**
  * Sync transaction to CRM (Real-time)
  * Called immediately after transaction is completed in POS
+ * 
+ * UPDATED: Now supports anonymous transactions
+ * FIXED: Line 198 - Changed customerId to tenantCustomerId
  */
 export const syncTransactionToCRM = async (transaction) => {
   if (!ENABLE_SYNC) {
@@ -168,7 +170,12 @@ export const syncTransactionToCRM = async (transaction) => {
   }
 
   const syncStartTime = Date.now();
-  console.log(`[CRM SYNC] Syncing transaction ${transaction.transactionNumber} to CRM`);
+  
+  // NEW: Check if this is an anonymous transaction
+  const isAnonymous = transaction.isAnonymousTransaction || transaction.customer?.isAnonymous || false;
+  
+  const transactionType = isAnonymous ? 'ANONYMOUS transaction' : 'transaction';
+  console.log(`[CRM SYNC] Syncing ${transactionType} ${transaction.transactionNumber} to CRM`);
 
   try {
     // Validate and extract CRM tenant ID
@@ -181,8 +188,13 @@ export const syncTransactionToCRM = async (transaction) => {
       transactionId: transaction.id,
       transactionNumber: transaction.transactionNumber,
       tenantId: tenantId,
-      customerId: transaction.customerId,
-      customerEmail: transaction.customer?.email,
+      
+      // NEW: Include anonymous flag
+      isAnonymous: isAnonymous,
+      
+      // FIXED: Changed customerId to tenantCustomerId (CRM expects this field name)
+      tenantCustomerId: isAnonymous ? null : transaction.customerId,
+      customerEmail: isAnonymous ? null : transaction.customer?.email,
       
       // Financial data
       amount: parseFloat(transaction.subtotal),
@@ -197,9 +209,9 @@ export const syncTransactionToCRM = async (transaction) => {
       amountPaid: parseFloat(transaction.amountPaid),
       changeGiven: parseFloat(transaction.changeGiven),
       
-      // Loyalty
-      pointsEarned: transaction.loyaltyPointsEarned || 0,
-      pointsRedeemed: transaction.loyaltyPointsRedeemed || 0,
+      // Loyalty (only for non-anonymous)
+      pointsEarned: isAnonymous ? 0 : (transaction.loyaltyPointsEarned || 0),
+      pointsRedeemed: isAnonymous ? 0 : (transaction.loyaltyPointsRedeemed || 0),
       
       // Items
       items: transaction.items?.map(item => ({
@@ -221,13 +233,25 @@ export const syncTransactionToCRM = async (transaction) => {
       timestamp: transaction.createdAt.toISOString(),
     };
 
+    // DEBUG: Log the payload being sent to CRM
+    console.log('[CRM SYNC DEBUG] Transaction payload:', JSON.stringify({
+      transactionId: payload.transactionId,
+      transactionNumber: payload.transactionNumber,
+      tenantCustomerId: payload.tenantCustomerId,
+      isAnonymous: payload.isAnonymous,
+      customerId: transaction.customerId,
+      hasCustomer: !!transaction.customer,
+      customerEmail: transaction.customer?.email,
+      total: payload.total
+    }, null, 2));
+
     // Send to CRM with retry
     await retryOperation(async () => {
       return await crmApiRequest(
         '/api/v1/sync/transaction',
         'POST',
         payload,
-        tenantId
+        transaction.businessId
       );
     });
 
@@ -251,7 +275,12 @@ export const syncTransactionToCRM = async (transaction) => {
     );
 
     // Update metrics
-    syncMetrics.transactionsSynced++;
+    if (isAnonymous) {
+      syncMetrics.anonymousTransactionsSynced++;
+    } else {
+      syncMetrics.transactionsSynced++;
+    }
+    
     const syncDuration = Date.now() - syncStartTime;
     syncMetrics.totalSyncTime += syncDuration;
 
@@ -264,6 +293,7 @@ export const syncTransactionToCRM = async (transaction) => {
       error: error.message,
       transactionId: transaction.id,
       tenantId: transaction.business?.externalTenantId || 'missing',
+      isAnonymous: isAnonymous,
     });
 
     // Log failure
@@ -277,14 +307,13 @@ export const syncTransactionToCRM = async (transaction) => {
       error
     );
 
-    // Don't throw error - transaction should still complete
-    // Failed syncs will be retried later
+    // Don't throw error - transaction creation should still complete
   }
 };
 
 /**
  * Sync customer to CRM (Real-time)
- * Called when customer is created or updated in POS
+ * Called immediately after customer is created or updated in POS
  */
 export const syncCustomerToCRM = async (customer, operation = 'create') => {
   if (!ENABLE_SYNC) {
@@ -308,40 +337,40 @@ export const syncCustomerToCRM = async (customer, operation = 'create') => {
       email: customer.email,
       firstName: customer.firstName,
       lastName: customer.lastName,
-      phone: customer.phone,
-      address: customer.address,
-      city: customer.city,
-      postalCode: customer.postalCode,
-      country: customer.country,
+      phone: customer.phone || '',
+      address: customer.address || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      postalCode: customer.zipCode || '',
+      zipCode: customer.zipCode || '',
+      country: customer.country || '',
       dateOfBirth: customer.dateOfBirth?.toISOString() || null,
-      
-      // Loyalty data (POS is source of truth)
       loyaltyPoints: customer.loyaltyPoints || 0,
       loyaltyTier: customer.loyaltyTier || 'BRONZE',
       totalSpent: parseFloat(customer.totalSpent || 0),
       visitCount: customer.visitCount || 0,
       lastVisit: customer.lastVisit?.toISOString() || null,
-      
-      // Preferences
       marketingOptIn: customer.marketingOptIn || false,
-      
-      // Metadata
-      memberSince: customer.memberSince.toISOString(),
-      updatedAt: customer.updatedAt.toISOString(),
+      notes: customer.notes || '',
+      isActive: customer.isActive !== false,
+      tags: customer.tags || [],
+      preferences: customer.preferences || {},
+      createdAt: customer.createdAt?.toISOString(),
+      updatedAt: customer.updatedAt?.toISOString(),
     };
 
     // Send to CRM with retry
-const response = await retryOperation(async () => {
-  return await crmApiRequest(
-    '/api/v1/sync/customer',
-    'POST',
-    payload,
-    tenantId
-  );
-});
+    const response = await retryOperation(async () => {
+      return await crmApiRequest(
+        '/api/v1/sync/customer',
+        'POST',
+        payload,
+        customer.businessId
+      );
+    });
 
     // Update customer to mark as synced AND save CRM customer ID
-const updateData = { lastSyncedAt: new Date() };
+    const updateData = { lastSyncedAt: new Date() };
 
     // Save the CRM customer ID if returned
     if (response?.customer?.id) {
@@ -511,8 +540,8 @@ export const checkCRMHealth = async (businessId) => {
 export const getSyncMetrics = () => {
   return {
     ...syncMetrics,
-    averageSyncTime: syncMetrics.transactionsSynced + syncMetrics.customersSynced > 0
-      ? (syncMetrics.totalSyncTime / (syncMetrics.transactionsSynced + syncMetrics.customersSynced)).toFixed(2)
+    averageSyncTime: syncMetrics.transactionsSynced + syncMetrics.customersSynced + syncMetrics.anonymousTransactionsSynced > 0
+      ? (syncMetrics.totalSyncTime / (syncMetrics.transactionsSynced + syncMetrics.customersSynced + syncMetrics.anonymousTransactionsSynced)).toFixed(2)
       : 0,
   };
 };
@@ -523,6 +552,7 @@ export const getSyncMetrics = () => {
 export const resetSyncMetrics = () => {
   syncMetrics.transactionsSynced = 0;
   syncMetrics.customersSynced = 0;
+  syncMetrics.anonymousTransactionsSynced = 0;
   syncMetrics.failedSyncs = 0;
   syncMetrics.totalSyncTime = 0;
 };

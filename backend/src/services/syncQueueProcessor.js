@@ -1,22 +1,22 @@
 /**
- * Sync Queue Processor - DIAGNOSTIC VERSION
+ * Sync Queue Processor
  * Processes items in the sync queue and sends them to CRM
  * 
  * Phase 2D: Batch processor for scheduled sync
- * DIAGNOSTIC: Enhanced logging to identify execution issues
+ * UPDATED: Added rental entity type support
  */
 
 import prisma from '../config/database.js';
 import * as syncQueueService from './syncQueueService.js';
 import * as crmIntegrationService from './crmIntegrationService.js';
 
-console.log('[DIAGNOSTIC] syncQueueProcessor.js module loaded at:', new Date().toISOString());
+console.log('[SYNC PROCESSOR] syncQueueProcessor.js module loaded at:', new Date().toISOString());
 
 // Configuration
 const BATCH_SIZE = parseInt(process.env.SYNC_BATCH_SIZE || '100');
 const MAX_RETRY_ATTEMPTS = parseInt(process.env.SYNC_RETRY_ATTEMPTS || '3');
 
-console.log('[DIAGNOSTIC] Configuration loaded:', { BATCH_SIZE, MAX_RETRY_ATTEMPTS });
+console.log('[SYNC PROCESSOR] Configuration loaded:', { BATCH_SIZE, MAX_RETRY_ATTEMPTS });
 
 /**
  * Process a single queue item
@@ -89,6 +89,30 @@ const processQueueItem = async (queueItem) => {
         syncResult = await crmIntegrationService.syncCustomerToCRM(entity, operation.toLowerCase());
         break;
 
+      case 'rental':
+        // NEW: Handle rental contract sync
+        entity = await prisma.rentalContract.findUnique({
+          where: { id: entityId },
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+            customer: true,
+            business: true,
+            transaction: true,
+          },
+        });
+
+        if (!entity) {
+          throw new Error(`Rental contract not found: ${entityId}`);
+        }
+
+        // Sync to CRM
+        syncResult = await crmIntegrationService.syncRentalToCRM(entity, operation.toLowerCase());
+        break;
+
       case 'product':
         // Future: Product sync to CRM
         console.log(`[QUEUE PROCESSOR] Product sync not yet implemented: ${entityId}`);
@@ -149,7 +173,7 @@ const isNonRetryableError = (error) => {
 export const processPendingQueue = async () => {
   const startTime = Date.now();
   console.log('\n╔═══════════════════════════════════════════╗');
-  console.log('║  SYNC QUEUE PROCESSOR - STARTING             ║');
+  console.log('║  SYNC QUEUE PROCESSOR - STARTING          ║');
   console.log('╚═══════════════════════════════════════════╝');
 
   try {
@@ -168,25 +192,25 @@ export const processPendingQueue = async () => {
     // Process HIGH priority first
     console.log('\n[PROCESSING HIGH PRIORITY ITEMS]');
     const highPriorityItems = await syncQueueService.getPendingItems(BATCH_SIZE, 'HIGH');
-    console.log(`[DIAGNOSTIC] Fetched ${highPriorityItems.length} HIGH priority items`);
+    console.log(`  Fetched ${highPriorityItems.length} HIGH priority items`);
     const highResults = await processItems(highPriorityItems);
 
     // Process NORMAL priority
     console.log('\n[PROCESSING NORMAL PRIORITY ITEMS]');
     const normalPriorityItems = await syncQueueService.getPendingItems(BATCH_SIZE, 'NORMAL');
-    console.log(`[DIAGNOSTIC] Fetched ${normalPriorityItems.length} NORMAL priority items`);
+    console.log(`  Fetched ${normalPriorityItems.length} NORMAL priority items`);
     const normalResults = await processItems(normalPriorityItems);
 
     // Process LOW priority (if time permits)
     console.log('\n[PROCESSING LOW PRIORITY ITEMS]');
     const lowPriorityItems = await syncQueueService.getPendingItems(BATCH_SIZE / 2, 'LOW');
-    console.log(`[DIAGNOSTIC] Fetched ${lowPriorityItems.length} LOW priority items`);
+    console.log(`  Fetched ${lowPriorityItems.length} LOW priority items`);
     const lowResults = await processItems(lowPriorityItems);
 
     // Process RETRY items
     console.log('\n[PROCESSING RETRY ITEMS]');
     const retryItems = await syncQueueService.getRetryItems(50);
-    console.log(`[DIAGNOSTIC] Fetched ${retryItems.length} RETRY items`);
+    console.log(`  Fetched ${retryItems.length} RETRY items`);
     const retryResults = await processItems(retryItems);
 
     // Combine results
@@ -207,7 +231,7 @@ export const processPendingQueue = async () => {
 
     // Log summary
     console.log('\n╔═══════════════════════════════════════════╗');
-    console.log('║  SYNC QUEUE PROCESSOR - COMPLETED            ║');
+    console.log('║  SYNC QUEUE PROCESSOR - COMPLETED         ║');
     console.log('╚═══════════════════════════════════════════╝');
     console.log('\n[PROCESSING SUMMARY]');
     console.log(`  Total Processed: ${allResults.length}`);
@@ -251,32 +275,28 @@ export const processPendingQueue = async () => {
 };
 
 /**
- * Sort queue items to ensure customers are processed before transactions
- * This prevents "customer not found" errors when syncing transactions
+ * Sort queue items to ensure proper dependency order:
+ * 1. Customers first (required for transactions and rentals)
+ * 2. Transactions second
+ * 3. Rentals third (may reference transactions)
+ * 4. Others last
+ * 
  * @param {Array} items - Queue items to sort
- * @returns {Array} Sorted items (customers first, then transactions)
+ * @returns {Array} Sorted items
  */
 const sortItemsByDependency = (items) => {
-  console.log(`[DIAGNOSTIC] sortItemsByDependency called with ${items.length} items`);
-  
-  // Log what we received
-  const itemTypes = items.map(i => i.entityType);
-  console.log(`[DIAGNOSTIC] Item types before sort:`, itemTypes);
-  
   // Separate by entity type
   const customers = items.filter(item => item.entityType === 'customer');
   const transactions = items.filter(item => item.entityType === 'transaction');
-  const others = items.filter(item => item.entityType !== 'customer' && item.entityType !== 'transaction');
+  const rentals = items.filter(item => item.entityType === 'rental');
+  const others = items.filter(item => 
+    !['customer', 'transaction', 'rental'].includes(item.entityType)
+  );
   
-  console.log(`[DIAGNOSTIC] Breakdown: ${customers.length} customers, ${transactions.length} transactions, ${others.length} others`);
+  console.log(`  Sort breakdown: ${customers.length} customers, ${transactions.length} transactions, ${rentals.length} rentals, ${others.length} others`);
   
-  // Return in order: customers first, then transactions, then others
-  const sorted = [...customers, ...transactions, ...others];
-  
-  const sortedTypes = sorted.map(i => i.entityType);
-  console.log(`[DIAGNOSTIC] Item types after sort:`, sortedTypes);
-  
-  return sorted;
+  // Return in dependency order
+  return [...customers, ...transactions, ...rentals, ...others];
 };
 
 /**
@@ -285,45 +305,35 @@ const sortItemsByDependency = (items) => {
  * @returns {Array} Processing results
  */
 const processItems = async (items) => {
-  console.log(`[DIAGNOSTIC] processItems called with ${items.length} items`);
-  
   if (items.length === 0) {
     console.log('  No items to process');
     return [];
   }
 
-  console.log(`[DIAGNOSTIC] About to call sortItemsByDependency...`);
-  
-  // Sort items to ensure customers are processed before transactions
+  // Sort items to ensure customers are processed before transactions/rentals
   const sortedItems = sortItemsByDependency(items);
   
-  console.log(`[DIAGNOSTIC] sortItemsByDependency returned ${sortedItems.length} items`);
   console.log(`  Processing ${sortedItems.length} items...`);
   
   // Log breakdown by entity type
   const customerCount = sortedItems.filter(i => i.entityType === 'customer').length;
   const transactionCount = sortedItems.filter(i => i.entityType === 'transaction').length;
-  
-  console.log(`[DIAGNOSTIC] customerCount: ${customerCount}, transactionCount: ${transactionCount}`);
+  const rentalCount = sortedItems.filter(i => i.entityType === 'rental').length;
   
   if (customerCount > 0) {
     console.log(`    - ${customerCount} customers (processed first)`);
-  } else {
-    console.log(`[DIAGNOSTIC] No customers to log (customerCount is 0)`);
   }
-  
   if (transactionCount > 0) {
     console.log(`    - ${transactionCount} transactions`);
-  } else {
-    console.log(`[DIAGNOSTIC] No transactions to log (transactionCount is 0)`);
+  }
+  if (rentalCount > 0) {
+    console.log(`    - ${rentalCount} rentals`);
   }
 
   const results = [];
 
   // Process items sequentially to avoid overwhelming CRM
   for (const item of sortedItems) {
-    console.log(`[DIAGNOSTIC] Processing item: ${item.entityType} - ${item.entityId}`);
-    
     try {
       const result = await processQueueItem(item);
       results.push(result);
@@ -386,6 +396,23 @@ export const processEntityImmediately = async (entityType, entityId, businessId)
         }
         break;
 
+      case 'rental':
+        // NEW: Handle immediate rental sync
+        entity = await prisma.rentalContract.findUnique({
+          where: { id: entityId },
+          include: {
+            items: { include: { product: true } },
+            customer: true,
+            business: true,
+            transaction: true,
+          },
+        });
+
+        if (entity) {
+          await crmIntegrationService.syncRentalToCRM(entity);
+        }
+        break;
+
       default:
         throw new Error(`Unknown entity type: ${entityType}`);
     }
@@ -422,7 +449,7 @@ export const getProcessorStatus = async () => {
   }
 };
 
-console.log('[DIAGNOSTIC] All functions defined, exports ready');
+console.log('[SYNC PROCESSOR] All functions defined, exports ready');
 
 export default {
   processPendingQueue,
