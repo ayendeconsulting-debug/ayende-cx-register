@@ -232,6 +232,78 @@ const Rentals = () => {
     }, 0);
   };
 
+  // ENHANCED: Early Return Calculation Summary
+  const calculateEarlyReturnSummary = () => {
+    if (!selectedRental) return null;
+    
+    const today = new Date();
+    const startDate = new Date(selectedRental.startDate);
+    const expectedReturnDate = new Date(selectedRental.expectedReturnDate);
+    
+    // Calculate days
+    const originalDays = Math.max(1, Math.ceil((expectedReturnDate - startDate) / (1000 * 60 * 60 * 24)));
+    const actualDays = Math.max(1, Math.ceil((today - startDate) / (1000 * 60 * 60 * 24)));
+    
+    const isEarlyReturn = today < expectedReturnDate;
+    const isOverdue = today > expectedReturnDate;
+    const overdueDays = isOverdue ? Math.ceil((today - expectedReturnDate) / (1000 * 60 * 60 * 24)) : 0;
+    
+    // Calculate original subtotal from contract
+    const originalSubtotal = Number(selectedRental.subtotal) || 0;
+    
+    // Calculate recalculated subtotal based on actual days
+    let recalculatedSubtotal = 0;
+    if (isEarlyReturn) {
+      // Sum up each item's cost for actual days
+      returnForm.items.forEach(item => {
+        const dailyRate = Number(item.dailyRate) || 0;
+        const qty = Number(item.quantity) || 0;
+        recalculatedSubtotal += dailyRate * qty * actualDays;
+      });
+    } else {
+      recalculatedSubtotal = originalSubtotal;
+    }
+    
+    // Calculate early return credit
+    const earlyReturnCredit = isEarlyReturn ? Math.max(0, originalSubtotal - recalculatedSubtotal) : 0;
+    
+    // Calculate total damage charges from form
+    const totalDamageCharges = returnForm.items.reduce((sum, item) => sum + (Number(item.damageCharge) || 0), 0);
+    
+    // Calculate deposit to return
+    const depositReturned = Number(returnForm.depositReturned) || 0;
+    const originalDeposit = Number(selectedRental.depositAmount) || 0;
+    
+    // Calculate final amounts
+    const newSubtotal = isEarlyReturn ? recalculatedSubtotal : originalSubtotal;
+    const taxAmount = Number(selectedRental.taxAmount) || 0;
+    const newTotalDue = newSubtotal + taxAmount + totalDamageCharges;
+    const totalPaid = Number(selectedRental.totalPaid) || 0;
+    
+    // Amount to refund or collect
+    const balanceBeforeReturn = newTotalDue - totalPaid;
+    const netRefund = depositReturned - balanceBeforeReturn - totalDamageCharges + earlyReturnCredit;
+    
+    return {
+      isEarlyReturn,
+      isOverdue,
+      originalDays,
+      actualDays,
+      overdueDays,
+      originalSubtotal,
+      recalculatedSubtotal,
+      earlyReturnCredit,
+      totalDamageCharges,
+      originalDeposit,
+      depositReturned,
+      newSubtotal,
+      taxAmount,
+      newTotalDue,
+      totalPaid,
+      netRefund
+    };
+  };
+
   const handleCreateRental = async (e) => {
     e.preventDefault();
     
@@ -285,7 +357,7 @@ const Rentals = () => {
     }
   };
 
-  // Return Modal Functions
+  // Return Modal Functions - ENHANCED with dailyRate
   const openReturnModal = (rental) => {
     setSelectedRental(rental);
     setReturnForm({
@@ -293,6 +365,7 @@ const Rentals = () => {
         itemId: item.id,
         productName: item.productName,
         quantity: item.quantity,
+        dailyRate: item.dailyRate,  // Include dailyRate for early return calculation
         returnedQuantity: item.quantity - item.returnedQuantity,
         damagedQuantity: 0,
         missingQuantity: 0,
@@ -993,10 +1066,10 @@ const Rentals = () => {
         </div>
       )}
 
-      {/* Return Modal */}
+      {/* Return Modal - ENHANCED with Early Return Calculation */}
       {showReturnModal && selectedRental && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -1009,13 +1082,126 @@ const Rentals = () => {
               </div>
 
               <form onSubmit={handleProcessReturn} className="space-y-6">
+                {/* Early Return Summary Card */}
+                {(() => {
+                  const summary = calculateEarlyReturnSummary();
+                  if (!summary) return null;
+                  
+                  return (
+                    <div className={`rounded-xl p-5 ${summary.isEarlyReturn ? 'bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200' : summary.isOverdue ? 'bg-gradient-to-r from-red-50 to-orange-50 border border-red-200' : 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200'}`}>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        {summary.isEarlyReturn ? (
+                          <>
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            Early Return - Customer Credit Available
+                          </>
+                        ) : summary.isOverdue ? (
+                          <>
+                            <AlertTriangle className="w-5 h-5 text-red-600" />
+                            Late Return - {summary.overdueDays} Day(s) Overdue
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-5 h-5 text-blue-600" />
+                            On-Time Return
+                          </>
+                        )}
+                      </h3>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        {/* Original Rental Period */}
+                        <div className="bg-white rounded-lg p-3 shadow-sm">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Original Period</p>
+                          <p className="text-xl font-bold text-gray-800">{summary.originalDays} days</p>
+                        </div>
+                        
+                        {/* Actual Days */}
+                        <div className="bg-white rounded-lg p-3 shadow-sm">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Actual Days Used</p>
+                          <p className={`text-xl font-bold ${summary.isEarlyReturn ? 'text-green-600' : summary.isOverdue ? 'text-red-600' : 'text-gray-800'}`}>
+                            {summary.actualDays} days
+                          </p>
+                        </div>
+                        
+                        {/* Original Amount */}
+                        <div className="bg-white rounded-lg p-3 shadow-sm">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Original Amount</p>
+                          <p className="text-xl font-bold text-gray-800">{formatCurrency(summary.originalSubtotal)}</p>
+                        </div>
+                        
+                        {/* Recalculated/Credit */}
+                        {summary.isEarlyReturn ? (
+                          <div className="bg-white rounded-lg p-3 shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">Recalculated Amount</p>
+                            <p className="text-xl font-bold text-green-600">{formatCurrency(summary.recalculatedSubtotal)}</p>
+                          </div>
+                        ) : (
+                          <div className="bg-white rounded-lg p-3 shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">Final Amount</p>
+                            <p className="text-xl font-bold text-gray-800">{formatCurrency(summary.newSubtotal)}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Financial Summary */}
+                      <div className="bg-white rounded-lg p-4 shadow-sm">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Rental Charges ({summary.isEarlyReturn ? `${summary.actualDays} days` : `${summary.originalDays} days`})</span>
+                            <span className="font-medium">{formatCurrency(summary.isEarlyReturn ? summary.recalculatedSubtotal : summary.originalSubtotal)}</span>
+                          </div>
+                          
+                          {summary.isEarlyReturn && summary.earlyReturnCredit > 0 && (
+                            <div className="flex justify-between text-green-600">
+                              <span>Early Return Credit ({summary.originalDays - summary.actualDays} unused days)</span>
+                              <span className="font-medium">-{formatCurrency(summary.earlyReturnCredit)}</span>
+                            </div>
+                          )}
+                          
+                          {summary.taxAmount > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Tax</span>
+                              <span className="font-medium">{formatCurrency(summary.taxAmount)}</span>
+                            </div>
+                          )}
+                          
+                          {summary.totalDamageCharges > 0 && (
+                            <div className="flex justify-between text-red-600">
+                              <span>Damage Charges</span>
+                              <span className="font-medium">+{formatCurrency(summary.totalDamageCharges)}</span>
+                            </div>
+                          )}
+                          
+                          <div className="border-t pt-2 flex justify-between">
+                            <span className="text-gray-600">Already Paid (Deposit)</span>
+                            <span className="font-medium">{formatCurrency(summary.totalPaid)}</span>
+                          </div>
+                          
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Deposit to Return</span>
+                            <span className="font-medium">{formatCurrency(summary.depositReturned)}</span>
+                          </div>
+                          
+                          <div className={`border-t pt-2 flex justify-between text-lg font-bold ${summary.netRefund >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <span>{summary.netRefund >= 0 ? 'Refund to Customer' : 'Customer Owes'}</span>
+                            <span>{formatCurrency(Math.abs(summary.netRefund))}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Items */}
                 <div>
                   <h3 className="font-medium text-gray-800 mb-2">Return Items</h3>
                   <div className="space-y-4">
                     {returnForm.items.map(item => (
                       <div key={item.itemId} className="border rounded-lg p-4">
-                        <p className="font-medium mb-3">{item.productName}</p>
+                        <div className="flex justify-between items-start mb-3">
+                          <p className="font-medium">{item.productName}</p>
+                          <span className="text-sm text-gray-500">{formatCurrency(item.dailyRate)}/day × {item.quantity} qty</span>
+                        </div>
                         <div className="grid grid-cols-4 gap-4">
                           <div>
                             <label className="block text-xs text-gray-600 mb-1">Returned (Good)</label>
