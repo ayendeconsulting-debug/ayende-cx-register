@@ -20,7 +20,7 @@ export const sendBusinessRegistrationNotification = async ({
   const msg = {
     to: 'admin@ayendecx.com',
     from: 'noreply@ayendecx.com',
-    subject: `🚀 New Business Registration: ${businessName}`,
+    subject: `New Business Registration: ${businessName}`,
     text: `
 New Business Registration - Ayende CX
 
@@ -76,7 +76,7 @@ This is an automated notification from Ayende CX Registration System
 <body>
   <div class="container">
     <div class="header">
-      <h1>🚀 New Business Registration</h1>
+      <h1>New Business Registration</h1>
       <p style="margin: 0; opacity: 0.9;">Ayende CX Platform</p>
     </div>
     
