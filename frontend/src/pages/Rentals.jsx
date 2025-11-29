@@ -6,7 +6,6 @@ import {
   Plus, 
   Eye, 
   RotateCcw,
-  Calendar,
   Clock,
   AlertTriangle,
   CheckCircle,
@@ -15,12 +14,8 @@ import {
   Filter,
   X,
   User,
-  Phone,
   FileText,
-  Truck,
-  ChevronDown,
   RefreshCw,
-  CreditCard,
   Wallet
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -86,9 +81,10 @@ const Rentals = () => {
     CANCELLED: XCircle
   };
 
-  useEffect(() => {
+   useEffect(() => {
     fetchRentals();
     fetchSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterStatus]);
 
   useEffect(() => {
