@@ -1,21 +1,10 @@
-/**
- * Email Utility
- * Handles admin notifications for business registration
- * 
- * Location: src/utils/email.js
- * 
- * UPDATED: Added "Provision CRM" magic link button
- */
-
 import sgMail from '@sendgrid/mail';
-import { generateProvisioningToken } from './provisioningToken.js';
 
 // Configure SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 /**
  * Send admin notification for new business registration
- * Includes "Provision CRM" magic link button
  */
 export const sendBusinessRegistrationNotification = async ({
   businessName,
@@ -28,21 +17,6 @@ export const sendBusinessRegistrationNotification = async ({
   primaryColor,
   secondaryColor
 }) => {
-  // Generate provisioning token and URL
-  const provisioningData = generateProvisioningToken({
-    businessName,
-    subdomain,
-    businessEmail,
-    businessPhone,
-    ownerFirstName,
-    ownerLastName,
-    ownerEmail,
-    primaryColor,
-    secondaryColor,
-  });
-  
-  console.log(`[EMAIL] Generated provisioning URL for ${businessName}`);
-  
   const msg = {
     to: 'admin@ayendecx.com',
     from: 'noreply@ayendecx.com',
@@ -55,6 +29,7 @@ BUSINESS DETAILS:
 Business Name: ${businessName}
 Subdomain: ${subdomain}
 POS URL: https://${subdomain}.ayendecx.com
+CRM URL: https://${subdomain}.ayendecx.com
 Business Email: ${businessEmail || 'Not provided'}
 Business Phone: ${businessPhone || 'Not provided'}
 
@@ -71,12 +46,12 @@ Secondary Color: ${secondaryColor || '#764ba2'}
 
 REGISTRATION TIME: ${new Date().toLocaleString()}
 
-PROVISION CRM:
---------------
-Click the link below to provision the CRM tenant (requires admin login):
-${provisioningData.provisionUrl}
-
-This link expires in 72 hours.
+NEXT STEPS:
+-----------
+1. Set up CRM tenant for this business
+2. Configure subdomain routing
+3. Send welcome email to owner
+4. Verify business details
 
 ---
 This is an automated notification from Ayende CX Registration System
@@ -94,13 +69,8 @@ This is an automated notification from Ayende CX Registration System
     .section h3 { margin-top: 0; color: #0a1e3d; }
     .detail { padding: 5px 0; }
     .label { font-weight: 600; color: #1e3a5f; }
-    .button { display: inline-block; padding: 12px 24px; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; font-weight: 600; }
-    .button-primary { background: #10B981; }
-    .button-secondary { background: #60a5fa; }
-    .provision-section { background: #d1fae5; border-left-color: #10B981; }
-    .provision-section h3 { color: #065f46; }
+    .button { display: inline-block; padding: 12px 24px; background: #60a5fa; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
     .next-steps { background: #fff3cd; border-left-color: #ffc107; }
-    .expiry-notice { font-size: 12px; color: #6b7280; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -109,23 +79,8 @@ This is an automated notification from Ayende CX Registration System
       <h1>New Business Registration</h1>
       <p style="margin: 0; opacity: 0.9;">Ayende CX Platform</p>
     </div>
-
+    
     <div class="content">
-      <!-- PROVISION CRM SECTION - PROMINENT AT TOP -->
-      <div class="section provision-section">
-        <h3>Provision CRM Tenant</h3>
-        <p style="margin: 0 0 15px 0;">Click the button below to automatically create the CRM tenant for this business:</p>
-        <div style="text-align: center;">
-          <a href="${provisioningData.provisionUrl}" class="button button-primary" style="color: white;">
-            Provision CRM Now
-          </a>
-        </div>
-        <p class="expiry-notice">
-          This link requires admin login and expires in 72 hours.<br>
-          Once clicked, the CRM tenant will be created and the owner will receive a setup wizard email.
-        </p>
-      </div>
-
       <div class="section">
         <h3>Business Details</h3>
         <div class="detail"><span class="label">Business Name:</span> ${businessName}</div>
@@ -145,30 +100,27 @@ This is an automated notification from Ayende CX Registration System
       <div class="section">
         <h3>Branding</h3>
         <div class="detail">
-          <span class="label">Primary Color:</span>
+          <span class="label">Primary Color:</span> 
           <span style="background: ${primaryColor || '#667eea'}; padding: 2px 10px; border-radius: 3px; color: white;">${primaryColor || '#667eea'}</span>
         </div>
         <div class="detail">
-          <span class="label">Secondary Color:</span>
+          <span class="label">Secondary Color:</span> 
           <span style="background: ${secondaryColor || '#764ba2'}; padding: 2px 10px; border-radius: 3px; color: white;">${secondaryColor || '#764ba2'}</span>
         </div>
       </div>
 
       <div class="section next-steps">
-        <h3>What Happens When You Click "Provision CRM"</h3>
+        <h3>⚠️ Next Steps Required</h3>
         <ol style="margin: 10px 0; padding-left: 20px;">
-          <li>CRM tenant <strong>${businessName}</strong> will be created</li>
-          <li>Subdomain <strong>${subdomain}.ayendecx.com</strong> will be configured</li>
-          <li>Owner account for <strong>${ownerEmail}</strong> will be created</li>
-          <li>POS - CRM sync will be enabled</li>
-          <li>Owner will receive a setup wizard email</li>
+          <li>Set up CRM tenant for <strong>${businessName}</strong></li>
+          <li>Configure subdomain routing for <strong>${subdomain}</strong></li>
+          <li>Send welcome email to owner</li>
+          <li>Verify business details and settings</li>
         </ol>
       </div>
 
       <div style="text-align: center; margin: 20px 0;">
-        <a href="https://staging.ayendecx.com/admin/" class="button button-secondary" style="color: white;">
-          Go to Admin Dashboard
-        </a>
+        <a href="https://ayendecx.com/admin/" class="button">Go to Admin Dashboard</a>
       </div>
 
       <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
