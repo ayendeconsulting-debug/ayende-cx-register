@@ -11,7 +11,10 @@ import {
   Loader,
   ArrowLeft,
   ArrowRight,
-  Globe
+  Globe,
+  FileText,
+  ExternalLink,
+  X
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -19,12 +22,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 
 const BusinessRegistration = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1); // 1: Business Info, 2: Owner Info, 3: Theme
+  const [step, setStep] = useState(1); // 1: Business Info, 2: Owner Info, 3: Theme & Terms
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [checkingSubdomain, setCheckingSubdomain] = useState(false);
   const [subdomainAvailable, setSubdomainAvailable] = useState(null);
+
+  // Terms state
+  const [currentTerms, setCurrentTerms] = useState(null);
+  const [setTermsLoading] = useState(true);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   const [formData, setFormData] = useState({
     // Business Information
@@ -32,27 +40,46 @@ const BusinessRegistration = () => {
     subdomain: '',
     businessEmail: '',
     businessPhone: '',
-    
+
     // Owner Information
     ownerFirstName: '',
     ownerLastName: '',
     ownerEmail: '',
     ownerPassword: '',
     confirmPassword: '',
-    
+
     // Theme Settings
     primaryColor: '#667eea',
-    secondaryColor: '#764ba2'
+    secondaryColor: '#764ba2',
+
+    // Terms Acceptance
+    termsAccepted: false
   });
 
+  // Fetch current terms on component mount
+  useEffect(() => {
+    const fetchTerms = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/terms/current`);
+        setCurrentTerms(response.data.data);
+      } catch (error) {
+        console.error('Error fetching terms:', error);
+        // Don't block registration if terms fetch fails, but log it
+      } finally {
+        setTermsLoading(false);
+      }
+    };
+    fetchTerms();
+  }, []);
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
     setError('');
-    
+
     // Clear subdomain availability when subdomain changes
     if (name === 'subdomain') {
       setSubdomainAvailable(null);
@@ -67,19 +94,18 @@ const BusinessRegistration = () => {
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '-')
         .substring(0, 20);
-      
+
       setFormData(prev => ({
         ...prev,
         subdomain: suggested
       }));
     }
- }, [formData.businessName, formData.subdomain]); // Only trigger on business name change
+  }, [formData.businessName, formData.subdomain]);
+
   // Check subdomain availability
   const checkSubdomain = async () => {
     if (!formData.subdomain) return;
-    
-    console.log('[API URL]', API_BASE_URL); // Debug: show what URL we're using
-    
+
     // Validate format
     const subdomainRegex = /^[a-z0-9-]+$/;
     if (!subdomainRegex.test(formData.subdomain)) {
@@ -90,7 +116,6 @@ const BusinessRegistration = () => {
     setCheckingSubdomain(true);
     try {
       const url = `${API_BASE_URL}/businesses/check-subdomain/${formData.subdomain}`;
-      console.log('[CHECK SUBDOMAIN]', url); // Debug: show full URL
       const response = await axios.get(url);
       setSubdomainAvailable({
         available: response.data.data.available,
@@ -145,6 +170,14 @@ const BusinessRegistration = () => {
     return true;
   };
 
+  const validateStep3 = () => {
+    if (!formData.termsAccepted) {
+      setError('You must accept the Terms of Service and Privacy Policy to register');
+      return false;
+    }
+    return true;
+  };
+
   const handleNext = () => {
     setError('');
     if (step === 1 && validateStep1()) {
@@ -162,6 +195,12 @@ const BusinessRegistration = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // Validate terms acceptance
+    if (!validateStep3()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -175,11 +214,14 @@ const BusinessRegistration = () => {
         ownerEmail: formData.ownerEmail,
         ownerPassword: formData.ownerPassword,
         primaryColor: formData.primaryColor,
-        secondaryColor: formData.secondaryColor
+        secondaryColor: formData.secondaryColor,
+        // Include terms acceptance
+        termsAccepted: formData.termsAccepted,
+        termsVersionId: currentTerms?.id || null
       });
 
       setSuccess(true);
-      
+
       // Redirect to login after 3 seconds
       setTimeout(() => {
         navigate('/login', {
@@ -195,6 +237,148 @@ const BusinessRegistration = () => {
       setError(error.response?.data?.message || 'Registration failed. Please try again.');
       setLoading(false);
     }
+  };
+
+  // Terms Modal Component
+  const TermsModal = () => {
+    if (!showTermsModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-6 border-b">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <FileText className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {currentTerms?.title || 'Terms of Service and Privacy Policy'}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Version {currentTerms?.version || '1.0.0'} • Effective {currentTerms?.effectiveDate ? new Date(currentTerms.effectiveDate).toLocaleDateString() : 'January 1, 2025'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowTermsModal(false)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+         {/* Modal Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="prose prose-sm max-w-none">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Terms of Service</h3>
+              
+              <p className="text-gray-700 mb-4">
+                Welcome to AyendeCX. These Terms of Service (&quot;Terms&quot;) constitute a legally binding agreement 
+                between you (&quot;Subscriber,&quot; &quot;you,&quot; or &quot;your&quot;) and AyendeCX Inc, a Canadian corporation 
+                (&quot;AyendeCX,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;).
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">1. Acceptance of Terms</h4>
+              <p className="text-gray-700 mb-4">
+                By clicking &quot;I Agree,&quot; creating an account, or using our services, you acknowledge that you 
+                have read, understood, and agree to be bound by these Terms and our Privacy Policy.
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">2. Platform Services</h4>
+              <p className="text-gray-700 mb-4">
+                AyendeCX provides a point-of-sale (POS) and customer relationship management (CRM) platform 
+                designed for businesses. Our services include transaction processing, customer management, 
+                loyalty programs, inventory management, and reporting tools.
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">3. Data Ownership</h4>
+              <p className="text-gray-700 mb-4">
+                You retain all ownership rights to your data. We act as a Data Processor for your customer 
+                information and process it only according to your instructions and as necessary to provide 
+                our services.
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">4. Subscription and Payment</h4>
+              <p className="text-gray-700 mb-4">
+                Subscription fees are billed in advance. All payments are non-refundable except as required 
+                by applicable law. We reserve the right to modify pricing with 30 days&apos; advance notice.
+              </p>
+
+              <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-4">Privacy Policy</h3>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">1. Information We Collect</h4>
+              <p className="text-gray-700 mb-4">
+                We collect business registration information, user account details, transaction data, and 
+                technical information necessary to provide our services.
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">2. How We Use Information</h4>
+              <p className="text-gray-700 mb-4">
+                We use collected information to operate the platform, provide customer support, improve our 
+                services, and communicate important updates.
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">3. Data Security</h4>
+              <p className="text-gray-700 mb-4">
+                We implement industry-standard security measures including encryption, access controls, and 
+                regular security assessments to protect your data.
+              </p>
+
+              <h4 className="font-semibold text-gray-800 mt-6 mb-2">4. Data Retention</h4>
+              <p className="text-gray-700 mb-4">
+                We retain your data for the duration of your subscription plus 30 days for export purposes. 
+                After termination, data is permanently deleted.
+              </p>
+
+              <div className="mt-8 p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Full Documents:</strong> The complete Terms of Service and Privacy Policy documents 
+                  are available at{' '}
+                  <a 
+                    href="https://ayendecx.com/legal/terms" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                  >
+                    ayendecx.com/legal/terms
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="p-6 border-t bg-gray-50 rounded-b-2xl">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                By proceeding, you agree to these terms.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, termsAccepted: true }));
+                    setShowTermsModal(false);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  I Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (success) {
@@ -488,7 +672,7 @@ const BusinessRegistration = () => {
               </div>
             )}
 
-            {/* Step 3: Theme Settings */}
+            {/* Step 3: Theme Settings & Terms */}
             {step === 3 && (
               <div className="space-y-6">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -498,7 +682,7 @@ const BusinessRegistration = () => {
 
                 <div className="bg-gray-50 rounded-lg p-6 mb-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Preview</h3>
-                  <div 
+                  <div
                     className="h-32 rounded-lg shadow-lg flex items-center justify-center text-white text-xl font-bold"
                     style={{
                       background: `linear-gradient(135deg, ${formData.primaryColor} 0%, ${formData.secondaryColor} 100%)`
@@ -554,7 +738,57 @@ const BusinessRegistration = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
+                {/* Terms and Conditions Section */}
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    Terms & Conditions
+                  </h3>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <p className="text-sm text-blue-800">
+                      Please review and accept our Terms of Service and Privacy Policy before completing your registration.
+                      {currentTerms && (
+                        <span className="block mt-1 text-xs text-blue-600">
+                          Version {currentTerms.version} • Effective {new Date(currentTerms.effectiveDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="termsAccepted"
+                      name="termsAccepted"
+                      checked={formData.termsAccepted}
+                      onChange={handleChange}
+                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="termsAccepted" className="text-sm text-gray-700 cursor-pointer">
+                      I have read and agree to the{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowTermsModal(true)}
+                        className="text-blue-600 hover:text-blue-700 font-medium underline"
+                      >
+                        Terms of Service
+                      </button>
+                      {' '}and{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowTermsModal(true)}
+                        className="text-blue-600 hover:text-blue-700 font-medium underline"
+                      >
+                        Privacy Policy
+                      </button>
+                      . I understand that my business data and customer information will be processed 
+                      in accordance with these agreements. *
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4">
                   <button
                     type="button"
                     onClick={handleBack}
@@ -565,7 +799,7 @@ const BusinessRegistration = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !formData.termsAccepted}
                     className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {loading ? (
@@ -596,6 +830,9 @@ const BusinessRegistration = () => {
           </p>
         </div>
       </div>
+
+      {/* Terms Modal */}
+      <TermsModal />
     </div>
   );
 };
