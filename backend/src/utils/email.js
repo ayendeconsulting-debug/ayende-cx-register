@@ -18,6 +18,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
  * Includes "Provision CRM" magic link button
  */
 export const sendBusinessRegistrationNotification = async ({
+  businessId,
   businessName,
   subdomain,
   businessEmail,
@@ -30,6 +31,7 @@ export const sendBusinessRegistrationNotification = async ({
 }) => {
   // Generate provisioning token and URL
   const provisioningData = generateProvisioningToken({
+    businessId,
     businessName,
     subdomain,
     businessEmail,

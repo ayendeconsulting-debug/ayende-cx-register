@@ -24,6 +24,7 @@ export const generateProvisioningToken = (businessData) => {
   
   // Create payload with business data and timestamp
   const payload = {
+    businessId: businessData.businessId,
     businessName: businessData.businessName,
     subdomain: businessData.subdomain,
     businessEmail: businessData.businessEmail,
