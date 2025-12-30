@@ -120,7 +120,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
   // ==========================================
   try {
     await sendBusinessRegistrationNotification({
-      businessId: business.id,
+      businessId: result.business.id,
       businessName,
       subdomain,
       businessEmail,
