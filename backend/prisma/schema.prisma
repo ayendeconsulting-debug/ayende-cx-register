@@ -97,6 +97,7 @@ model Business {
   stockAdjustments       StockAdjustment[]
   syncLogs               SyncLog[]
   rentalContracts        RentalContract[]
+  termsAcceptances       TermsAcceptance[]
 
   @@index([businessName])
   @@index([externalTenantId])
@@ -693,6 +694,49 @@ model RentalContractItem {
 }
 
 // ============================================================================
+// TERMS & LEGAL ACCEPTANCE TRACKING
+// ============================================================================
+
+model TermsVersion {
+  id            String            @id @default(uuid())
+  version       String            @unique
+  documentType  TermsDocumentType
+  title         String
+  effectiveDate DateTime
+  content       String?
+  contentUrl    String?
+  changelog     String?
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  acceptances   TermsAcceptance[]
+
+  @@index([documentType, isActive])
+  @@index([effectiveDate])
+  @@map("terms_versions")
+}
+
+model TermsAcceptance {
+  id              String       @id @default(uuid())
+  businessId      String
+  termsVersionId  String
+  acceptedBy      String?
+  acceptedByEmail String
+  acceptedByName  String
+  acceptedAt      DateTime     @default(now())
+  ipAddress       String?
+  userAgent       String?
+  
+  business        Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  termsVersion    TermsVersion @relation(fields: [termsVersionId], references: [id])
+
+  @@unique([businessId, termsVersionId])
+  @@index([businessId])
+  @@index([termsVersionId])
+  @@index([acceptedAt])
+  @@map("terms_acceptances")
+}
+
+// ============================================================================
 // ENUMS
 // ============================================================================
 
@@ -883,4 +927,11 @@ enum EntityType {
   product
   business
   rental
+}
+
+enum TermsDocumentType {
+  TERMS_OF_SERVICE
+  PRIVACY_POLICY
+  DATA_PROCESSING
+  COMBINED
 }

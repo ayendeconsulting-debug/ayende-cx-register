@@ -60,6 +60,11 @@ import reconciliationRoutes from './routes/reconciliationRoutes.js';
 import adminRoutes from './routes/admin.js';
 
 // ============================================
+// TERMS & LEGAL ROUTES
+// ============================================
+import termsRoutes from './routes/termsRoutes.js';
+
+// ============================================
 // CRON JOBS
 // ============================================
 import * as syncJob from './cron/syncJob.js';
@@ -274,6 +279,7 @@ app.use('/api/integration', customerSyncRoutes);
 app.use('/api/integration/webhook', integrationWebhookRoutes);
 app.use(`/api/${API_VERSION}/webhooks`, webhookRoutes);
 app.use(`/api/${API_VERSION}/reconciliation`, reconciliationRoutes);
+app.use(`/api/${API_VERSION}/terms`, termsRoutes);
 
 // Admin routes
 app.use('/api/admin', adminRoutes);
