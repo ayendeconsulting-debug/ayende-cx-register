@@ -1,3 +1,8 @@
+// AyendeCX POS Platform - Schema v2.0
+// Multi-Business Type Architecture
+// Date: January 1, 2026
+// Environment: Staging
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,755 +12,98 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id                    String                    @id @default(uuid())
-  email                 String
-  username              String
-  passwordHash          String
-  firstName             String
-  lastName              String
-  role                  UserRole                  @default(CASHIER)
-  isActive              Boolean                   @default(true)
-  lastLogin             DateTime?
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
-  businessId            String
-  auditLogs             AuditLog[]
-  shifts                Shift[]
-  transactions          Transaction[]
-  business              Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  UserInvitation        UserInvitation[]
-  approvedAdjustments   StockAdjustment[]         @relation("ApprovedBy")
-  createdAdjustments    StockAdjustment[]         @relation("CreatedBy")
-  adjustmentApprovals   StockAdjustmentApproval[]
-  stockMovements        StockMovementHistory[]
-  processedReturns      RentalContract[]          @relation("ReturnProcessor")
-
-  @@unique([businessId, email])
-  @@unique([businessId, username])
-  @@index([businessId])
-  @@index([email])
-  @@index([username])
-  passwordResetToken    String?
-  passwordResetExpires  DateTime?
-}
-
-model Business {
-  id                     String                  @id @default(uuid())
-  externalTenantId       String?                 @unique
-  subdomain              String?                 @unique
-  businessName           String
-  businessAddress        String?
-  businessCity           String?
-  businessState          String?
-  businessZipCode        String?
-  businessCountry        String?
-  businessPhone          String?
-  businessEmail          String?
-  businessWebsite        String?
-  logoUrl                String?
-  primaryColor           String?                 @default("#3B82F6")
-  secondaryColor         String?                 @default("#10B981")
-  currency               String                  @default("$")
-  currencyCode           String                  @default("USD")
-  currencyPosition       String                  @default("before")
-  decimalSeparator       String                  @default(".")
-  thousandsSeparator     String                  @default(",")
-  decimalPlaces          Int                     @default(2)
-  timezone               String                  @default("America/Toronto")
-  dateFormat             String                  @default("MM/DD/YYYY")
-  timeFormat             String                  @default("12")
-  taxEnabled             Boolean                 @default(true)
-  taxRate                Decimal                 @default(0.00) @db.Decimal(5, 4)
-  taxLabel               String                  @default("Tax")
-  taxNumber              String?
-  receiptHeader          String?
-  receiptFooter          String?
-  loyaltyEnabled         Boolean                 @default(true)
-  isActive               Boolean                 @default(true)
-  subscriptionTier       String?                 @default("BASIC")
-  subscriptionExpiry     DateTime?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  lastSyncedAt           DateTime?               @db.Timestamp(6)
-  syncStatus             SyncStatus?             @default(PENDING)
-  // Rental Settings
-  rentalEnabled          Boolean                 @default(false)
-  defaultDepositPercent  Decimal?                @default(25) @db.Decimal(5, 2)
-  overdueGracePeriodDays Int?                    @default(0)
-  categories             Category[]
-  customers              Customer[]
-  loyaltyReconciliations LoyaltyReconciliation[]
-  loyaltyTransactions    LoyaltyTransaction[]
-  products               Product[]
-  shifts                 Shift[]
-  syncQueues             SyncQueue[]
-  SystemMapping          SystemMapping[]
-  transactions           Transaction[]
-  users                  User[]
-  UserInvitation         UserInvitation[]
-  stockAdjustments       StockAdjustment[]
-  syncLogs               SyncLog[]
-  rentalContracts        RentalContract[]
-  termsAcceptances       TermsAcceptance[]
-
-  @@index([businessName])
-  @@index([externalTenantId])
-}
-
-model Customer {
-  id                  String                  @id @default(uuid())
-  firstName           String
-  lastName            String
-  email               String?
-  phone               String?
-  dateOfBirth         DateTime?
-  loyaltyPoints       Int                     @default(0)
-  totalSpent          Decimal                 @default(0) @db.Decimal(10, 2)
-  visitCount          Int                     @default(0)
-  lastVisit           DateTime?
-  memberSince         DateTime                @default(now())
-  loyaltyTier         LoyaltyTier             @default(BRONZE)
-  address             String?
-  city                String?
-  state               String?
-  zipCode             String?
-  marketingOptIn      Boolean                 @default(false)
-  isActive            Boolean                 @default(true)
-  notes               String?
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  businessId          String
-  externalId          String?
-  lastSyncedAt        DateTime?
-  customerSource      CustomerSource?         @default(POS)
-  isAnonymous         Boolean?                @default(false)
-  lastRefreshedAt     DateTime?               @db.Timestamp(6)
-  loyaltyLastSyncedAt DateTime?               @db.Timestamp(6)
-  loyaltyPointsCRM    Int?
-  loyaltyPointsLocal  Int?                    @default(0)
-  needsEnrichment     Boolean?                @default(false)
-  syncError           String?
-  syncRetryCount      Int?                    @default(0)
-  syncState           CustomerSyncState?      @default(PENDING)
-  syncStatus          SyncStatus?             @default(PENDING)
-  business            Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  reconciliations     LoyaltyReconciliation[]
-  loyaltyTransactions LoyaltyTransaction[]
-  transactions        Transaction[]
-  rentalContracts     RentalContract[]
-
-  @@unique([businessId, email])
-  @@unique([businessId, phone])
-  @@index([businessId])
-  @@index([email])
-  @@index([loyaltyTier])
-  @@index([externalId])
-  @@index([phone])
-  @@index([isAnonymous])
-  @@index([syncState])
-  @@index([customerSource])
-}
-
-model Category {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  isActive    Boolean   @default(true)
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  businessId  String
-  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  products    Product[]
-
-  @@unique([businessId, name])
-  @@index([businessId])
-  @@index([name])
-}
-
-model Product {
-  id                  String               @id @default(uuid())
-  sku                 String
-  name                String
-  description         String?
-  categoryId          String
-  price               Decimal              @db.Decimal(10, 2)
-  costPrice           Decimal?             @db.Decimal(10, 2)
-  stockQuantity       Int                  @default(0)
-  lowStockAlert       Int                  @default(10)
-  unit                String               @default("unit")
-  barcode             String?
-  imageUrl            String?
-  isActive            Boolean              @default(true)
-  isTaxable           Boolean              @default(true)
-  loyaltyPoints       Int                  @default(0)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  businessId          String
-  currency            String               @default("$")
-  currencyCode        String               @default("USD")
-  // Rental fields
-  isRental            Boolean              @default(false)
-  dailyRate           Decimal?             @db.Decimal(10, 2)
-  hourlyRate          Decimal?             @db.Decimal(10, 2)
-  weeklyRate          Decimal?             @db.Decimal(10, 2)
-  latePenaltyRate     Decimal?             @db.Decimal(10, 2)
-  minRentalDuration   Int?                 @default(1)
-  maxRentalDuration   Int?
-  requiresDeposit     Boolean              @default(true)
-  depositAmount       Decimal?             @db.Decimal(10, 2)
-  business            Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  category            Category             @relation(fields: [categoryId], references: [id])
-  stockMovements      StockMovement[]
-  transactionItems    TransactionItem[]
-  adjustments         StockAdjustment[]
-  movementHistory     StockMovementHistory[]
-  rentalContractItems RentalContractItem[]
-
-  @@unique([businessId, barcode])
-  @@unique([businessId, sku])
-  @@index([businessId])
-  @@index([categoryId])
-  @@index([barcode])
-  @@index([name])
-  @@index([sku])
-  @@index([isRental])
-}
-
-model Transaction {
-  id                    String            @id @default(uuid())
-  transactionNumber     String
-  customerId            String?
-  userId                String
-  subtotal              Decimal           @db.Decimal(10, 2)
-  taxAmount             Decimal           @db.Decimal(10, 2)
-  discountAmount        Decimal           @default(0) @db.Decimal(10, 2)
-  total                 Decimal           @db.Decimal(10, 2)
-  paymentMethod         PaymentMethod
-  amountPaid            Decimal           @db.Decimal(10, 2)
-  changeGiven           Decimal           @default(0) @db.Decimal(10, 2)
-  loyaltyPointsEarned   Int               @default(0)
-  loyaltyPointsRedeemed Int               @default(0)
-  status                TransactionStatus @default(COMPLETED)
-  voidReason            String?
-  shiftId               String?
-  notes                 String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  businessId            String
-  currency              String            @default("$")
-  currencyCode          String            @default("CAD")
-  externalId            String?
-  syncedAt              DateTime?
-  syncedToCRM           Boolean           @default(false)
-  syncStatus            SyncStatus?       @default(PENDING)
-  syncedToCrm           Boolean?          @default(false)
-  syncError             String?
-  lastSyncedAt          DateTime?
-  // Rental reference
-  transactionType       TransactionType   @default(SALE)
-  StockMovement         StockMovement[]
-  business              Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer              Customer?         @relation(fields: [customerId], references: [id])
-  shift                 Shift?            @relation(fields: [shiftId], references: [id])
-  user                  User              @relation(fields: [userId], references: [id])
-  items                 TransactionItem[]
-  rentalContract        RentalContract?
-
-  @@unique([businessId, transactionNumber])
-  @@index([businessId])
-  @@index([customerId])
-  @@index([userId])
-  @@index([shiftId])
-  @@index([createdAt])
-  @@index([externalId])
-  @@index([status])
-  @@index([syncedToCRM])
-  @@index([syncedToCrm])
-  @@index([transactionType])
-}
-
-model TransactionItem {
-  id            String      @id @default(uuid())
-  transactionId String
-  productId     String
-  productName   String
-  sku           String
-  quantity      Int
-  unitPrice     Decimal     @db.Decimal(10, 2)
-  subtotal      Decimal     @db.Decimal(10, 2)
-  discount      Decimal     @default(0) @db.Decimal(10, 2)
-  tax           Decimal     @db.Decimal(10, 2)
-  total         Decimal     @db.Decimal(10, 2)
-  createdAt     DateTime    @default(now())
-  currency      String      @default("$")
-  currencyCode  String      @default("CAD")
-  // Rental fields for line item
-  isRentalItem  Boolean     @default(false)
-  rentalDays    Int?
-  dailyRate     Decimal?    @db.Decimal(10, 2)
-  product       Product     @relation(fields: [productId], references: [id])
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-
-  @@index([transactionId])
-  @@index([productId])
-}
-
-model LoyaltyTransaction {
-  id            String                 @id @default(uuid())
-  customerId    String
-  type          LoyaltyTransactionType
-  points        Int
-  transactionId String?
-  description   String
-  expiresAt     DateTime?
-  createdAt     DateTime               @default(now())
-  businessId    String
-  business      Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer      Customer               @relation(fields: [customerId], references: [id])
-
-  @@index([customerId])
-  @@index([businessId])
-  @@index([createdAt])
-}
-
-model LoyaltyReconciliation {
-  id           String    @id @default(uuid())
-  businessId   String
-  customerId   String
-  detectedAt   DateTime  @default(now())
-  posPoints    Int
-  crmPoints    Int
-  discrepancy  Int
-  action       String?
-  status       String    @default("PENDING")
-  resolvedBy   String?
-  resolvedAt   DateTime?
-  notes        String?
-  errorMessage String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@index([businessId])
-  @@index([customerId])
-  @@index([detectedAt])
-  @@index([status])
-  @@map("LoyaltyReconciliation")
-}
-
-model Shift {
-  id           String        @id @default(uuid())
-  userId       String
-  shiftNumber  String
-  openingCash  Decimal       @db.Decimal(10, 2)
-  closingCash  Decimal?      @db.Decimal(10, 2)
-  expectedCash Decimal?      @db.Decimal(10, 2)
-  variance     Decimal?      @db.Decimal(10, 2)
-  status       ShiftStatus   @default(OPEN)
-  openedAt     DateTime      @default(now())
-  closedAt     DateTime?
-  notes        String?
-  businessId   String
-  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user         User          @relation(fields: [userId], references: [id])
-  transactions Transaction[]
-
-  @@unique([businessId, shiftNumber])
-  @@index([userId])
-  @@index([businessId])
-  @@index([status])
-  @@index([openedAt])
-}
-
-model StockMovement {
-  id            String            @id @default(uuid())
-  productId     String
-  quantity      Int
-  previousStock Int
-  newStock      Int
-  reference     String?
-  notes         String?
-  createdAt     DateTime          @default(now())
-  movementType  StockMovementType
-  transactionId String?
-  product       Product           @relation(fields: [productId], references: [id])
-  transaction   Transaction?      @relation(fields: [transactionId], references: [id])
-
-  @@index([productId])
-  @@index([transactionId])
-  @@index([createdAt])
-}
-
-model AuditLog {
-  id         String      @id @default(uuid())
-  userId     String?
-  action     AuditAction
-  entityType String
-  entityId   String?
-  changes    String?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime    @default(now())
-  user       User?       @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([entityType])
-  @@index([createdAt])
-}
-
-model UserInvitation {
-  id              String           @id @default(uuid())
-  businessId      String
-  email           String
-  firstName       String
-  lastName        String
-  role            UserRole
-  invitationToken String           @unique
-  expiresAt       DateTime
-  invitedBy       String
-  message         String?
-  status          InvitationStatus @default(PENDING)
-  acceptedAt      DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime
-  business        Business         @relation(fields: [businessId], references: [id])
-  inviter         User             @relation(fields: [invitedBy], references: [id])
-
-  @@index([businessId])
-  @@index([email])
-  @@index([status])
-  @@index([invitationToken])
-}
-
-model StockAdjustment {
-  id               String                   @id @default(uuid())
-  adjustmentNumber String
-  productId        String
-  adjustmentType   AdjustmentType
-  quantityBefore   Int
-  quantityChange   Int
-  quantityAfter    Int
-  unitCost         Decimal                  @db.Decimal(10, 2)
-  totalValue       Decimal                  @db.Decimal(10, 2)
-  reason           AdjustmentReason
-  customReason     String?
-  notes            String?
-  status           AdjustmentStatus         @default(PENDING)
-  requiresApproval Boolean                  @default(false)
-  createdBy        String
-  approvedBy       String?
-  createdAt        DateTime                 @default(now())
-  processedAt      DateTime?
-  businessId       String
-  approval         StockAdjustmentApproval?
-  approver         User?                    @relation("ApprovedBy", fields: [approvedBy], references: [id])
-  business         Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  creator          User                     @relation("CreatedBy", fields: [createdBy], references: [id])
-  product          Product                  @relation(fields: [productId], references: [id])
-  movementHistory  StockMovementHistory?
-
-  @@unique([businessId, adjustmentNumber])
-  @@index([businessId])
-  @@index([productId])
-  @@index([createdBy])
-  @@index([status])
-  @@index([createdAt])
-  @@map("stock_adjustments")
-}
-
-model StockAdjustmentApproval {
-  id              String          @id @default(uuid())
-  adjustmentId    String          @unique
-  status          ApprovalStatus  @default(PENDING)
-  approvedBy      String?
-  decision        String?
-  rejectionReason String?
-  approvalNotes   String?
-  submittedAt     DateTime        @default(now())
-  reviewedAt      DateTime?
-  adjustment      StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
-  approver        User?           @relation(fields: [approvedBy], references: [id])
-
-  @@index([status])
-  @@index([submittedAt])
-  @@map("stock_adjustment_approvals")
-}
-
-model StockMovementHistory {
-  id             String                 @id @default(uuid())
-  movementType   AdjustmentMovementType
-  referenceId    String
-  referenceType  String
-  productId      String
-  adjustmentId   String?                @unique
-  quantityBefore Int
-  quantityChange Int
-  quantityAfter  Int
-  unitCost       Decimal                @db.Decimal(10, 2)
-  totalValue     Decimal                @db.Decimal(10, 2)
-  reason         String
-  notes          String?
-  performedBy    String
-  createdAt      DateTime               @default(now())
-  adjustment     StockAdjustment?       @relation(fields: [adjustmentId], references: [id])
-  performer      User                   @relation(fields: [performedBy], references: [id])
-  product        Product                @relation(fields: [productId], references: [id])
-
-  @@index([productId])
-  @@index([performedBy])
-  @@index([createdAt])
-  @@index([movementType])
-  @@map("stock_movement_history")
-}
-
-model SystemMapping {
-  id           String            @id @default(uuid())
-  entityType   EntityMappingType
-  posId        String
-  crmId        String
-  businessId   String
-  lastSyncedAt DateTime          @default(now()) @db.Timestamp(6)
-  syncStatus   SyncStatus        @default(PENDING)
-  metadata     Json?
-  createdAt    DateTime          @default(now()) @db.Timestamp(6)
-  updatedAt    DateTime          @default(now()) @updatedAt @db.Timestamp(6)
-  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  @@unique([entityType, crmId])
-  @@unique([entityType, posId])
-  @@index([businessId])
-  @@index([entityType, syncStatus])
-}
-
-model SyncLog {
-  id           String     @id @default(uuid())
-  businessId   String
-  operation    String
-  direction    String
-  entityType   String
-  entityId     String
-  status       SyncStatus @default(PENDING)
-  attemptCount Int        @default(1)
-  errorMessage String?
-  payload      String
-  response     String?
-  createdAt    DateTime   @default(now())
-  completedAt  DateTime?
-  nextRetryAt  DateTime?
-  business     Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  @@index([businessId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([entityType, entityId])
-  @@map("sync_logs")
-}
-
-model SyncQueue {
-  id           String       @id @default(uuid())
-  businessId   String
-  entityType   EntityType
-  entityId     String
-  operation    String
-  priority     SyncPriority @default(NORMAL)
-  status       QueueStatus  @default(PENDING)
-  retryCount   Int          @default(0)
-  scheduledFor DateTime     @default(now())
-  processedAt  DateTime?
-  error        String?
-  payload      Json?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  @@index([businessId])
-  @@index([status, priority])
-  @@index([scheduledFor])
-}
-
-model SystemConfig {
-  id          String   @id
-  key         String   @unique
-  value       String
-  description String?
-  updatedAt   DateTime
-
-  @@index([key])
-}
-
-// ============================================================================
-// RENTAL MANAGEMENT MODELS
-// ============================================================================
-
-model RentalContract {
-  id                 String               @id @default(uuid())
-  contractNumber     String
-  businessId         String
-  customerId         String
-  transactionId      String?              @unique
-  
-  // Dates
-  startDate          DateTime
-  expectedReturnDate DateTime
-  actualReturnDate   DateTime?
-  
-  // Rental duration tracking
-  rentalDays         Int
-  
-  // Financials
-  subtotal           Decimal              @db.Decimal(10, 2)
-  taxAmount          Decimal              @default(0) @db.Decimal(10, 2)
-  depositAmount      Decimal              @db.Decimal(10, 2)
-  rentalPaymentUpfront Decimal @default(0) @db.Decimal(10, 2)
-  depositReturned    Decimal?             @db.Decimal(10, 2)
-  penaltyAmount      Decimal              @default(0) @db.Decimal(10, 2)
-  damageCharges      Decimal              @default(0) @db.Decimal(10, 2)
-  totalDue           Decimal              @db.Decimal(10, 2)
-  totalPaid          Decimal              @default(0) @db.Decimal(10, 2)
-  balanceDue         Decimal              @default(0) @db.Decimal(10, 2)
-  
-  // Currency
-  currency           String               @default("$")
-  currencyCode       String               @default("CAD")
-  
-  // Status
-  status             RentalStatus         @default(ACTIVE)
-  
-  // Return processing
-  returnedBy         String?
-  returnNotes        String?
-  damageNotes        String?
-  
-  // Contact info for rental period
-  contactPhone       String?
-  contactEmail       String?
-  deliveryAddress    String?
-  
-  // Notifications tracking
-  overdueNotified    Boolean              @default(false)
-  overdueNotifiedAt  DateTime?
-  reminderSent       Boolean              @default(false)
-  reminderSentAt     DateTime?
-  
-  // Timestamps
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  closedAt           DateTime?
-  
-  // Relations
-  business           Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer           Customer             @relation(fields: [customerId], references: [id])
-  transaction        Transaction?         @relation(fields: [transactionId], references: [id])
-  returnProcessor    User?                @relation("ReturnProcessor", fields: [returnedBy], references: [id])
-  items              RentalContractItem[]
-  
-  @@unique([businessId, contractNumber])
-  @@index([businessId])
-  @@index([customerId])
-  @@index([status])
-  @@index([expectedReturnDate])
-  @@index([startDate])
-  @@map("rental_contracts")
-}
-
-model RentalContractItem {
-  id               String          @id @default(uuid())
-  contractId       String
-  productId        String
-  productName      String
-  sku              String
-  quantity         Int
-  dailyRate        Decimal         @db.Decimal(10, 2)
-  subtotal         Decimal         @db.Decimal(10, 2)
-  
-  // Return tracking
-  returnedQuantity Int             @default(0)
-  damagedQuantity  Int             @default(0)
-  missingQuantity  Int             @default(0)
-  
-  // Damage details
-  damageDescription String?
-  damageCharge      Decimal        @default(0) @db.Decimal(10, 2)
-  
-  // Timestamps
-  createdAt        DateTime        @default(now())
-  returnedAt       DateTime?
-  
-  // Relations
-  contract         RentalContract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  product          Product         @relation(fields: [productId], references: [id])
-  
-  @@index([contractId])
-  @@index([productId])
-  @@map("rental_contract_items")
-}
-
-// ============================================================================
-// TERMS & LEGAL ACCEPTANCE TRACKING
-// ============================================================================
-
-model TermsVersion {
-  id            String            @id @default(uuid())
-  version       String            @unique
-  documentType  TermsDocumentType
-  title         String
-  effectiveDate DateTime
-  content       String?
-  contentUrl    String?
-  changelog     String?
-  isActive      Boolean           @default(true)
-  createdAt     DateTime          @default(now())
-  acceptances   TermsAcceptance[]
-
-  @@index([documentType, isActive])
-  @@index([effectiveDate])
-  @@map("terms_versions")
-}
-
-model TermsAcceptance {
-  id              String       @id @default(uuid())
-  businessId      String
-  termsVersionId  String
-  acceptedBy      String?
-  acceptedByEmail String
-  acceptedByName  String
-  acceptedAt      DateTime     @default(now())
-  ipAddress       String?
-  userAgent       String?
-  
-  business        Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  termsVersion    TermsVersion @relation(fields: [termsVersionId], references: [id])
-
-  @@unique([businessId, termsVersionId])
-  @@index([businessId])
-  @@index([termsVersionId])
-  @@index([acceptedAt])
-  @@map("terms_acceptances")
-}
-
 // ============================================================================
 // ENUMS
 // ============================================================================
 
-enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  CASHIER
-  INVENTORY_MANAGER
+enum BusinessType {
+  RETAIL        // Traditional product sales
+  RENTAL        // Equipment/event rentals
+  SERVICE       // Professional services
+  HOSPITALITY   // Restaurants, cafes, bars
+}
+
+enum CustomerAccountType {
+  PERSON        // Individual/walk-in customers (B2C)
+  BUSINESS      // Corporate/business customers (B2B)
+}
+
+enum TransactionType {
+  SALE
+  RENTAL
+  SERVICE
+  HOSPITALITY
+}
+
+enum PaymentStatus {
+  PENDING       // Awaiting payment
+  PAID          // Fully paid
+  PARTIAL       // Partially paid
+  FAILED        // Payment failed
+  REFUNDED      // Payment refunded
+  CANCELLED     // Transaction cancelled
 }
 
 enum PaymentMethod {
   CASH
-  CARD
+  CREDIT_CARD
+  DEBIT_CARD
   MOBILE_MONEY
   BANK_TRANSFER
-  LOYALTY_POINTS
-  SPLIT
-  MOBILE
+  CHECK
+  STORE_CREDIT
   OTHER
+}
+
+enum DepositStatus {
+  HELD          // Deposit is being held
+  REFUNDED      // Deposit has been refunded
+  FORFEITED     // Deposit was forfeited (damage/late)
+  APPLIED       // Applied to final payment
+}
+
+enum ServiceEngagementType {
+  HOURLY        // Billed by the hour
+  FIXED         // Fixed price project
+  RETAINER      // Ongoing retainer
+  SUBSCRIPTION  // Recurring subscription
+}
+
+enum HospitalityServiceType {
+  DINE_IN
+  TAKEOUT
+  DELIVERY
+  CATERING
+}
+
+enum RefundReason {
+  CUSTOMER_REQUEST
+  DAMAGED_PRODUCT
+  WRONG_ITEM
+  DEFECTIVE
+  CANCELLED_SERVICE
+  LATE_RETURN
+  OTHER
+}
+
+enum StaffRole {
+  OWNER
+  MANAGER
+  CASHIER
+  SERVER        // Hospitality
+  KITCHEN       // Hospitality
+  TECHNICIAN    // Service
+  SALES_REP     // Retail
+  RENTAL_AGENT  // Rental
+}
+
+enum PermissionLevel {
+  NONE
+  VIEW
+  CREATE
+  EDIT
+  DELETE
+  FULL
 }
 
 enum LoyaltyTier {
@@ -765,173 +113,939 @@ enum LoyaltyTier {
   PLATINUM
 }
 
-enum ShiftStatus {
-  OPEN
-  CLOSED
+// ============================================================================
+// BUSINESS & CONFIGURATION MODELS
+// ============================================================================
+
+model Business {
+  id                String              @id @default(uuid())
+  name              String
+  subdomain         String              @unique
+  business_type     BusinessType        @default(RETAIL)
+  
+  // Owner information
+  owner_name        String
+  owner_email       String
+  owner_phone       String?
+  
+  // Branding
+  logo_url          String?
+  primary_color     String?             @default("#10B981")
+  secondary_color   String?             @default("#059669")
+  
+  // Address
+  address           String?
+  city              String?
+  state             String?
+  country           String?
+  postal_code       String?
+  
+  // Status
+  is_active         Boolean             @default(true)
+  trial_ends_at     DateTime?
+  subscription_tier String?             @default("starter")
+  
+  // External integration
+  externalTenantId  String?             @unique
+  
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  config            BusinessConfig?
+  customers         TenantCustomer[]
+  transactions      Transaction[]
+  staff             Staff[]
+  products          Product[]
+  services          Service[]
+  equipment         Equipment[]
+  menuItems         MenuItem[]
+  loyaltyProgram    LoyaltyProgram?
+  
+  @@index([subdomain])
+  @@index([business_type])
 }
 
-enum StockMovementType {
-  PURCHASE
-  SALE
-  ADJUSTMENT
-  RETURN
-  DAMAGE
-  TRANSFER
-  WRITE_OFF
-  RENTAL_OUT
-  RENTAL_RETURN
+model BusinessConfig {
+  id                String      @id @default(uuid())
+  business_id       String      @unique
+  business          Business    @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // ========== RETAIL FEATURES ==========
+  inventory_enabled       Boolean @default(false)
+  barcode_scanning        Boolean @default(false)
+  stock_alerts            Boolean @default(false)
+  low_stock_threshold     Int?    @default(10)
+  
+  // ========== RENTAL FEATURES ==========
+  rental_contracts        Boolean @default(false)
+  deposit_management      Boolean @default(false)
+  late_fee_enabled        Boolean @default(false)
+  late_fee_per_day        Decimal @default(0) @db.Decimal(10, 2)
+  damage_fee_enabled      Boolean @default(false)
+  
+  // ========== SERVICE FEATURES ==========
+  appointment_booking     Boolean @default(false)
+  staff_commissions       Boolean @default(false)
+  commission_percentage   Decimal @default(0) @db.Decimal(5, 2)
+  time_tracking           Boolean @default(false)
+  
+  // ========== HOSPITALITY FEATURES ==========
+  table_management        Boolean @default(false)
+  kitchen_display         Boolean @default(false)
+  tips_enabled            Boolean @default(true)
+  split_bill_enabled      Boolean @default(true)
+  
+  // ========== UNIVERSAL FEATURES ==========
+  loyalty_enabled         Boolean @default(true)
+  email_receipts          Boolean @default(true)
+  sms_notifications       Boolean @default(false)
+  
+  // Multi-currency
+  multi_currency_enabled  Boolean @default(false)
+  default_currency        String  @default("NGN")
+  supported_currencies    String[] @default(["NGN"])
+  
+  // Partial payments
+  partial_payments_enabled Boolean @default(false)
+  min_deposit_percent     Decimal? @default(0) @db.Decimal(5, 2)
+  
+  // Tax settings
+  tax_enabled             Boolean @default(true)
+  tax_rate                Decimal @default(0) @db.Decimal(5, 2)
+  tax_exempt_services     Boolean @default(false)
+  
+  // Refund policies
+  refund_enabled          Boolean @default(true)
+  refund_restocking_fee   Decimal @default(0) @db.Decimal(5, 2)
+  refund_window_days      Int?    @default(30)
+  
+  // Minimum order values
+  min_order_enabled       Boolean @default(false)
+  min_order_amount        Decimal @default(0) @db.Decimal(10, 2)
+  
+  // Offline mode
+  offline_mode_enabled    Boolean @default(true)
+  offline_sync_interval   Int?    @default(300) // seconds
+  
+  // UI/UX preferences
+  color_theme             String? // JSON: { primary, secondary, accent }
+  dashboard_widgets       String? // JSON: array of enabled widgets
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
-enum InvitationStatus {
-  PENDING
-  ACCEPTED
-  EXPIRED
-  REVOKED
+// ============================================================================
+// CUSTOMER MODELS
+// ============================================================================
+
+model TenantCustomer {
+  id                String              @id @default(uuid())
+  tenant_id         String?
+  tenant            Business?           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  // Account type
+  account_type      CustomerAccountType @default(PERSON)
+  
+  // ========== PERSON ACCOUNT FIELDS ==========
+  first_name        String?
+  last_name         String?
+  date_of_birth     DateTime?
+  gender            String?
+  
+  // ========== BUSINESS ACCOUNT FIELDS ==========
+  business_name     String?             // Company legal name
+  business_reg_no   String?             // Registration/tax ID
+  industry          String?
+  company_size      String?             // SOLE, SMALL, MEDIUM, LARGE
+  
+  // Contact person (for BUSINESS accounts)
+  contact_person_name   String?
+  contact_person_title  String?
+  contact_person_phone  String?
+  contact_person_email  String?
+  
+  // ========== COMMON FIELDS ==========
+  email             String?
+  phone             String?
+  address           String?
+  city              String?
+  state             String?
+  postal_code       String?
+  country           String?
+  
+  // Loyalty
+  loyalty_points_balance    Int         @default(0)
+  loyalty_tier              LoyaltyTier @default(BRONZE)
+  
+  // Spending & engagement
+  total_lifetime_value      Decimal     @default(0) @db.Decimal(10, 2)
+  visit_count               Int         @default(0)
+  last_visit                DateTime?
+  member_since              DateTime    @default(now())
+  
+  // B2B specific
+  credit_limit              Decimal?    @db.Decimal(10, 2)
+  payment_terms             String?     @default("IMMEDIATE") // IMMEDIATE, NET_30, NET_60, NET_90
+  outstanding_balance       Decimal     @default(0) @db.Decimal(10, 2)
+  tax_exempt                Boolean     @default(false)
+  tax_exempt_cert           String?     // Document URL
+  
+  // Preferences
+  marketing_opt_in          Boolean     @default(false)
+  preferred_contact_method  String?     @default("email") // email, sms, phone
+  
+  // Status
+  is_active                 Boolean     @default(true)
+  notes                     String?
+  
+  // CRM sync
+  external_id               String?
+  last_synced_at            DateTime?
+  
+  // Timestamps
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  
+  // Relations
+  transactions              Transaction[]
+  loyaltyTransactions       LoyaltyTransaction[]
+  appointments              Appointment[]
+  
+  @@unique([tenant_id, email])
+  @@unique([tenant_id, phone])
+  @@index([tenant_id])
+  @@index([email])
+  @@index([phone])
+  @@index([loyalty_tier])
+  @@index([account_type])
 }
 
-enum SyncStatus {
-  PENDING
-  IN_PROGRESS
-  SUCCESS
-  FAILED
-  RETRY_SCHEDULED
+// ============================================================================
+// STAFF MODELS
+// ============================================================================
+
+model Staff {
+  id                String              @id @default(uuid())
+  business_id       String
+  business          Business            @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // Personal info
+  first_name        String
+  last_name         String
+  email             String
+  phone             String?
+  
+  // Authentication
+  username          String
+  password_hash     String
+  
+  // Role
+  role              StaffRole           @default(CASHIER)
+  
+  // Status
+  is_active         Boolean             @default(true)
+  last_login        DateTime?
+  
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  permissions       StaffPermission?
+  serviceAssignments ServiceAssignment[]
+  processedTransactions Transaction[]     @relation("ProcessedBy")
+  
+  @@unique([business_id, email])
+  @@unique([business_id, username])
+  @@index([business_id])
+  @@index([email])
 }
 
-enum AdjustmentMovementType {
-  ADJUSTMENT
-  SALE
-  PURCHASE
-  TRANSFER
-  RETURN
-  RENTAL_OUT
-  RENTAL_RETURN
+model StaffPermission {
+  id                    String          @id @default(uuid())
+  staff_id              String          @unique
+  staff                 Staff           @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  
+  // Transaction permissions
+  transaction_create    PermissionLevel @default(NONE)
+  transaction_void      PermissionLevel @default(NONE)
+  transaction_refund    PermissionLevel @default(NONE)
+  
+  // Rental-specific
+  rental_checkout       PermissionLevel @default(NONE)
+  rental_checkin        PermissionLevel @default(NONE)
+  rental_extend         PermissionLevel @default(NONE)
+  
+  // Inventory
+  inventory_view        PermissionLevel @default(NONE)
+  inventory_adjust      PermissionLevel @default(NONE)
+  
+  // Customer management
+  customer_create       PermissionLevel @default(NONE)
+  customer_edit         PermissionLevel @default(NONE)
+  
+  // Reporting
+  reports_view          PermissionLevel @default(NONE)
+  
+  // Settings
+  settings_manage       PermissionLevel @default(NONE)
+  
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 }
 
-enum AdjustmentReason {
-  NEW_STOCK_RECEIVED
-  SUPPLIER_RETURN_CREDIT
-  FOUND_ITEMS
-  DAMAGED_GOODS
-  THEFT_SHRINKAGE
-  EXPIRED_ITEMS
-  CUSTOMER_RETURN_DEFECTIVE
-  PHYSICAL_COUNT_CORRECTION
-  SYSTEM_ERROR_CORRECTION
-  TRANSFER_CORRECTION
-  RENTAL_DAMAGE
-  OTHER
+// ============================================================================
+// PRODUCT/SERVICE CATALOG MODELS
+// ============================================================================
+
+model Product {
+  id                String          @id @default(uuid())
+  business_id       String
+  business          Business        @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // Basic info
+  sku               String
+  name              String
+  description       String?
+  category          String?
+  
+  // Pricing
+  price             Decimal         @db.Decimal(10, 2)
+  cost_price        Decimal?        @db.Decimal(10, 2)
+  
+  // Inventory
+  stock_quantity    Int             @default(0)
+  low_stock_alert   Int             @default(10)
+  unit              String          @default("unit")
+  
+  // Media
+  barcode           String?
+  image_url         String?
+  
+  // Status
+  is_active         Boolean         @default(true)
+  is_taxable        Boolean         @default(true)
+  
+  // Loyalty
+  loyalty_points    Int             @default(0)
+  
+  // Timestamps
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  saleLineItems     SaleLineItem[]
+  
+  @@unique([business_id, sku])
+  @@unique([business_id, barcode])
+  @@index([business_id])
+  @@index([category])
+  @@index([name])
 }
 
-enum AdjustmentStatus {
-  PENDING
-  APPROVED
-  AUTO_APPROVED
-  REJECTED
-  CANCELLED
+model Equipment {
+  id                    String          @id @default(uuid())
+  business_id           String
+  business              Business        @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // Basic info
+  name                  String
+  description           String?
+  sku                   String
+  category              String?
+  
+  // Rental pricing
+  daily_rate            Decimal?        @db.Decimal(10, 2)
+  hourly_rate           Decimal?        @db.Decimal(10, 2)
+  weekly_rate           Decimal?        @db.Decimal(10, 2)
+  
+  // Deposit
+  deposit_required      Boolean         @default(true)
+  deposit_amount        Decimal?        @db.Decimal(10, 2)
+  
+  // Availability
+  quantity_total        Int             @default(1)
+  quantity_available    Int             @default(1)
+  
+  // Restrictions
+  min_rental_days       Int?            @default(1)
+  max_rental_days       Int?
+  
+  // Media
+  image_url             String?
+  
+  // Status
+  is_active             Boolean         @default(true)
+  
+  // Timestamps
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  // Relations
+  rentalLineItems       RentalLineItem[]
+  
+  @@unique([business_id, sku])
+  @@index([business_id])
+  @@index([category])
 }
 
-enum AdjustmentType {
-  ADD
-  REMOVE
-  ADJUST
+model Service {
+  id                    String              @id @default(uuid())
+  business_id           String
+  business              Business            @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // Basic info
+  name                  String
+  description           String?
+  category              String?
+  
+  // Pricing
+  hourly_rate           Decimal?            @db.Decimal(10, 2)
+  fixed_price           Decimal?            @db.Decimal(10, 2)
+  
+  // Duration
+  estimated_duration    Int?                // minutes
+  
+  // Staff requirements
+  requires_staff        Boolean             @default(false)
+  
+  // Tax
+  is_taxable            Boolean             @default(true)
+  
+  // Status
+  is_active             Boolean             @default(true)
+  
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  serviceLineItems      ServiceLineItem[]
+  
+  @@index([business_id])
+  @@index([category])
 }
 
-enum ApprovalStatus {
-  PENDING
-  APPROVED
-  REJECTED
+model MenuItem {
+  id                    String                  @id @default(uuid())
+  business_id           String
+  business              Business                @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // Basic info
+  name                  String
+  description           String?
+  category              String?                 // APPETIZER, MAIN, DESSERT, BEVERAGE
+  
+  // Pricing
+  price                 Decimal                 @db.Decimal(10, 2)
+  cost_price            Decimal?                @db.Decimal(10, 2)
+  
+  // Preparation
+  prep_time             Int?                    // minutes
+  
+  // Availability
+  available_quantity    Int?                    // for limited items
+  is_available          Boolean                 @default(true)
+  
+  // Media
+  image_url             String?
+  
+  // Dietary info
+  allergens             String?                 // JSON array
+  is_vegetarian         Boolean                 @default(false)
+  is_vegan              Boolean                 @default(false)
+  
+  // Status
+  is_active             Boolean                 @default(true)
+  
+  // Timestamps
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  hospitalityLineItems  HospitalityLineItem[]
+  
+  @@index([business_id])
+  @@index([category])
 }
 
-enum AuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  VOID_TRANSACTION
-  REFUND
-  STOCK_ADJUSTMENT
-  RENTAL_CREATE
-  RENTAL_RETURN
-  RENTAL_CLOSE
+// ============================================================================
+// TRANSACTION MODELS (Polymorphic)
+// ============================================================================
+
+model Transaction {
+  id                String          @id @default(uuid())
+  business_id       String
+  business          Business        @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  transaction_type  TransactionType
+  
+  // Customer
+  customer_id       String?
+  customer          TenantCustomer? @relation(fields: [customer_id], references: [id])
+  is_walk_in        Boolean         @default(false)
+  
+  // Financial
+  currency          String          @default("NGN")
+  subtotal          Decimal         @db.Decimal(10, 2)
+  tax_amount        Decimal         @default(0) @db.Decimal(10, 2)
+  discount_amount   Decimal         @default(0) @db.Decimal(10, 2)
+  tip_amount        Decimal         @default(0) @db.Decimal(10, 2)
+  total_amount      Decimal         @db.Decimal(10, 2)
+  
+  // Payment tracking
+  payment_status    PaymentStatus   @default(PENDING)
+  amount_paid       Decimal         @default(0) @db.Decimal(10, 2)
+  amount_due        Decimal         @default(0) @db.Decimal(10, 2)
+  
+  // Loyalty
+  loyalty_points_earned   Int       @default(0)
+  loyalty_points_redeemed Int       @default(0)
+  
+  // Metadata
+  processed_by      String?         // Staff ID
+  processor         Staff?          @relation("ProcessedBy", fields: [processed_by], references: [id])
+  notes             String?
+  
+  // Timestamps
+  transaction_date  DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // CRM sync
+  external_id       String?
+  synced_at         DateTime?
+  
+  // Polymorphic relationships
+  sale_details      SaleTransaction?
+  rental_details    RentalTransaction?
+  service_details   ServiceTransaction?
+  hospitality_details HospitalityTransaction?
+  
+  // Relations
+  line_items        TransactionLineItem[]
+  payments          Payment[]
+  refunds           Refund[]
+  loyaltyTransactions LoyaltyTransaction[]
+  
+  @@index([business_id])
+  @@index([customer_id])
+  @@index([transaction_type])
+  @@index([transaction_date])
+  @@index([payment_status])
 }
 
-enum LoyaltyTransactionType {
-  EARNED
-  REDEEMED
-  EXPIRED
-  ADJUSTED
-  BONUS
+// ========== SPECIALIZED TRANSACTION MODELS ==========
+
+model SaleTransaction {
+  id              String      @id @default(uuid())
+  transaction_id  String      @unique
+  transaction     Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  receipt_number  String      @unique
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 }
 
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  VOID
-  REFUNDED
+model RentalTransaction {
+  id              String          @id @default(uuid())
+  transaction_id  String          @unique
+  transaction     Transaction     @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  // Contract
+  contract_number String          @unique
+  rental_start    DateTime
+  rental_end      DateTime
+  actual_return   DateTime?
+  
+  // Deposit
+  deposit_amount  Decimal         @db.Decimal(10, 2)
+  deposit_status  DepositStatus   @default(HELD)
+  
+  // Late fees
+  late_fee_per_day Decimal?       @default(0) @db.Decimal(10, 2)
+  late_fee_charged Decimal?       @default(0) @db.Decimal(10, 2)
+  
+  // Damage
+  damage_fee      Decimal?        @default(0) @db.Decimal(10, 2)
+  damage_notes    String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
-enum TransactionType {
-  SALE
-  RENTAL
-  REFUND
-  EXCHANGE
+model ServiceTransaction {
+  id              String                  @id @default(uuid())
+  transaction_id  String                  @unique
+  transaction     Transaction             @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  // Service details
+  service_date    DateTime
+  duration_hours  Decimal?                @db.Decimal(5, 2)
+  
+  // Project
+  project_name    String?
+  engagement_type ServiceEngagementType?
+  
+  // Commission
+  commission_enabled Boolean               @default(false)
+  commission_amount  Decimal              @default(0) @db.Decimal(10, 2)
+  
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  
+  // Relations
+  assignments     ServiceAssignment[]
 }
 
-enum RentalStatus {
-  DRAFT
-  ACTIVE
-  OVERDUE
-  PARTIALLY_RETURNED
-  RETURNED
-  CLOSED
-  CANCELLED
+model HospitalityTransaction {
+  id              String                  @id @default(uuid())
+  transaction_id  String                  @unique
+  transaction     Transaction             @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  // Table & service
+  table_number    String?
+  server_id       String?
+  service_type    HospitalityServiceType?
+  guest_count     Int?
+  
+  // Timing
+  order_time      DateTime                @default(now())
+  served_time     DateTime?
+  
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 }
 
-enum EntityMappingType {
-  CUSTOMER
-  BUSINESS
-  TRANSACTION
+// ============================================================================
+// LINE ITEM MODELS (Polymorphic)
+// ============================================================================
+
+model TransactionLineItem {
+  id              String      @id @default(uuid())
+  transaction_id  String
+  transaction     Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  item_type       String      // PRODUCT, EQUIPMENT, SERVICE, MENU_ITEM
+  
+  // Polymorphic details
+  sale_details    SaleLineItem?
+  rental_details  RentalLineItem?
+  service_details ServiceLineItem?
+  hospitality_details HospitalityLineItem?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([transaction_id])
 }
 
-enum CustomerSource {
-  CRM
-  POS
-  ANONYMOUS
+model SaleLineItem {
+  id              String              @id @default(uuid())
+  line_item_id    String              @unique
+  line_item       TransactionLineItem @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+  
+  // Product
+  product_id      String
+  product         Product             @relation(fields: [product_id], references: [id], onDelete: Restrict)
+  product_name    String
+  sku             String?
+  
+  // Quantities & pricing
+  quantity        Int
+  unit_price      Decimal             @db.Decimal(10, 2)
+  line_total      Decimal             @db.Decimal(10, 2)
+  
+  // Discount
+  discount_percent Decimal?           @default(0) @db.Decimal(5, 2)
+  discount_amount  Decimal?           @default(0) @db.Decimal(10, 2)
+  
+  createdAt       DateTime            @default(now())
 }
 
-enum CustomerSyncState {
-  SYNCED
-  PENDING
-  CONFLICT
-  FAILED
+model RentalLineItem {
+  id              String              @id @default(uuid())
+  line_item_id    String              @unique
+  line_item       TransactionLineItem @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+  
+  // Equipment
+  equipment_id    String
+  equipment       Equipment           @relation(fields: [equipment_id], references: [id], onDelete: Restrict)
+  equipment_name  String
+  
+  // Rental details
+  rental_period_days Int
+  daily_rate      Decimal             @db.Decimal(10, 2)
+  total_rental_fee Decimal            @db.Decimal(10, 2)
+  
+  // Condition tracking
+  condition_out   String?
+  condition_in    String?
+  
+  createdAt       DateTime            @default(now())
 }
 
-enum SyncPriority {
-  HIGH
-  NORMAL
-  LOW
+model ServiceLineItem {
+  id              String              @id @default(uuid())
+  line_item_id    String              @unique
+  line_item       TransactionLineItem @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+  
+  // Service
+  service_id      String
+  service         Service             @relation(fields: [service_id], references: [id], onDelete: Restrict)
+  service_name    String
+  service_category String?
+  
+  // Billing
+  hours           Decimal?            @db.Decimal(5, 2)
+  hourly_rate     Decimal?            @db.Decimal(10, 2)
+  fixed_fee       Decimal?            @db.Decimal(10, 2)
+  line_total      Decimal             @db.Decimal(10, 2)
+  
+  createdAt       DateTime            @default(now())
 }
 
-enum QueueStatus {
-  PENDING
-  PROCESSING
-  SUCCESS
-  FAILED
-  RETRY
+model HospitalityLineItem {
+  id              String              @id @default(uuid())
+  line_item_id    String              @unique
+  line_item       TransactionLineItem @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+  
+  // Menu item
+  menu_item_id    String
+  menu_item       MenuItem            @relation(fields: [menu_item_id], references: [id], onDelete: Restrict)
+  menu_item_name  String
+  category        String?
+  
+  // Order details
+  quantity        Int
+  unit_price      Decimal             @db.Decimal(10, 2)
+  line_total      Decimal             @db.Decimal(10, 2)
+  
+  // Customization
+  special_requests String?
+  modifications   String?             // JSON: array of mods
+  
+  createdAt       DateTime            @default(now())
 }
 
-enum EntityType {
-  customer
-  transaction
-  product
-  business
-  rental
+// ============================================================================
+// PAYMENT & REFUND MODELS
+// ============================================================================
+
+model Payment {
+  id              String        @id @default(uuid())
+  transaction_id  String
+  transaction     Transaction   @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  // Payment details
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("NGN")
+  payment_method  PaymentMethod
+  
+  // Multi-currency exchange
+  exchange_rate   Decimal?      @default(1) @db.Decimal(10, 6)
+  amount_in_base_currency Decimal? @db.Decimal(10, 2)
+  
+  // Payment reference
+  reference       String?       @unique
+  
+  // Status
+  status          PaymentStatus @default(PENDING)
+  
+  // Metadata
+  notes           String?
+  payment_date    DateTime      @default(now())
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([transaction_id])
 }
 
-enum TermsDocumentType {
-  TERMS_OF_SERVICE
-  PRIVACY_POLICY
-  DATA_PROCESSING
-  COMBINED
+model Refund {
+  id              String        @id @default(uuid())
+  transaction_id  String
+  transaction     Transaction   @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  
+  // Refund details
+  amount          Decimal       @db.Decimal(10, 2)
+  restocking_fee  Decimal       @default(0) @db.Decimal(10, 2)
+  net_refund      Decimal       @db.Decimal(10, 2)
+  
+  // Reason
+  reason          RefundReason
+  notes           String?
+  
+  // Status
+  status          PaymentStatus @default(PENDING)
+  
+  // Metadata
+  refund_date     DateTime      @default(now())
+  processed_by    String?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([transaction_id])
+}
+
+// ============================================================================
+// SERVICE ASSIGNMENT MODEL
+// ============================================================================
+
+model ServiceAssignment {
+  id                      String              @id @default(uuid())
+  service_transaction_id  String
+  service_transaction     ServiceTransaction  @relation(fields: [service_transaction_id], references: [id], onDelete: Cascade)
+  
+  staff_id                String
+  staff                   Staff               @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  
+  // Commission
+  hours_worked            Decimal?            @db.Decimal(5, 2)
+  commission_earned       Decimal             @default(0) @db.Decimal(10, 2)
+  
+  createdAt               DateTime            @default(now())
+  
+  @@index([service_transaction_id])
+  @@index([staff_id])
+}
+
+// ============================================================================
+// APPOINTMENT MODEL
+// ============================================================================
+
+model Appointment {
+  id              String          @id @default(uuid())
+  business_id     String
+  
+  // Customer
+  customer_id     String
+  customer        TenantCustomer  @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  
+  // Appointment details
+  title           String
+  description     String?
+  appointment_date DateTime
+  duration_minutes Int
+  
+  // Status
+  status          String          @default("scheduled") // scheduled, confirmed, in_progress, completed, cancelled
+  
+  // Metadata
+  notes           String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([customer_id])
+  @@index([appointment_date])
+}
+
+// ============================================================================
+// LOYALTY PROGRAM MODELS
+// ============================================================================
+
+model LoyaltyProgram {
+  id                      String      @id @default(uuid())
+  business_id             String      @unique
+  business                Business    @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  
+  // Program configuration
+  points_calculation_method String    @default("per_dollar") // per_dollar, per_session, per_transaction
+  
+  // Calculation parameters
+  points_per_dollar       Decimal?    @default(1) @db.Decimal(5, 2)
+  points_per_session      Int?        @default(10)
+  points_per_transaction  Int?        @default(5)
+  
+  // Redemption
+  redemption_value        Decimal     @default(0.01) @db.Decimal(10, 4) // 100 points = $1
+  min_points_redemption   Int         @default(100)
+  
+  // Tiers
+  bronze_threshold        Int         @default(0)
+  silver_threshold        Int         @default(500)
+  gold_threshold          Int         @default(1000)
+  platinum_threshold      Int         @default(2500)
+  
+  // Tier benefits (JSON)
+  tier_benefits           String?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+}
+
+model LoyaltyTransaction {
+  id              String          @id @default(uuid())
+  customer_id     String
+  customer        TenantCustomer  @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  
+  transaction_id  String?
+  transaction     Transaction?    @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
+  
+  // Points
+  points_earned   Int             @default(0)
+  points_redeemed Int             @default(0)
+  points_balance  Int             @default(0)
+  
+  // Type
+  type            String          // EARNED, REDEEMED, ADJUSTED, EXPIRED
+  reason          String?
+  
+  // Metadata
+  transaction_date DateTime       @default(now())
+  
+  createdAt       DateTime        @default(now())
+  
+  @@index([customer_id])
+  @@index([transaction_date])
+}
+
+// ============================================================================
+// LEGACY MODELS (Preserved for compatibility)
+// ============================================================================
+
+model Owner {
+  id              String      @id @default(uuid())
+  businessId      String
+  firstName       String
+  lastName        String
+  email           String      @unique
+  password        String
+  phone           String?
+  role            String      @default("owner")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model TermsVersion {
+  id            String            @id @default(uuid())
+  version       String            @unique
+  documentType  String
+  title         String
+  effectiveDate DateTime
+  content       String?
+  contentUrl    String?
+  changelog     String?
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  acceptances   TermsAcceptance[]
+}
+
+model TermsAcceptance {
+  id              String       @id @default(uuid())
+  businessId      String
+  termsVersionId  String
+  termsVersion    TermsVersion @relation(fields: [termsVersionId], references: [id])
+  acceptedBy      String?
+  acceptedByEmail String
+  acceptedByName  String
+  acceptedAt      DateTime     @default(now())
+  ipAddress       String?
+  userAgent       String?
 }
