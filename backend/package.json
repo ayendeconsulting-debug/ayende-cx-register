@@ -4,7 +4,7 @@
     "main":  "src/server.js",
     "type":  "module",
     "scripts":  {
-                    "start": "npx prisma migrate deploy && node src/server.js",
+                    "start":  "node src/server.js",
                     "dev":  "nodemon src/server.js",
                     "worker":  "node src/jobs/queueProcessor.js",
                     "worker:dev":  "nodemon src/jobs/queueProcessor.js",
@@ -16,7 +16,7 @@
                     "prisma:studio":  "prisma studio",
                     "prisma:seed":  "node prisma/seed.js",
                     "job:retry-syncs":  "node src/jobs/retrySyncs.js",
-                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1"
+                    "test":  "echo \"Error: no test specified\" && exit 1"
                 },
     "engines":  {
                     "node":  "\u003e=18.0.0",
@@ -59,3 +59,4 @@
                         },
     "version":  "2.0.0"
 }
+
