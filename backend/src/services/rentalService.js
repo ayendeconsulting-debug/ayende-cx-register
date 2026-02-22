@@ -783,7 +783,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
   });
 
   // Get most rented products
-  const mostRentedProducts = await prisma.rental_contractsItem.groupBy({
+  const mostRentedProducts = await prisma.rental_contract_items.groupBy({
     by: ['productId'],
     where: {
       contract: whereClause

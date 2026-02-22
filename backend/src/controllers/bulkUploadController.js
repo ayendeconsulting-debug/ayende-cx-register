@@ -350,7 +350,8 @@ export const importProducts = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      userId,
+      id: uuidv4(),
+        userId,
       action: 'CREATE',
       entityType: 'Product',
       entityId: null,
@@ -524,6 +525,7 @@ export const importCustomers = asyncHandler(async (req, res) => {
       // Create customer
       const customer = await prisma.customer.create({
         data: {
+          id: uuidv4(),
           businessId,
           firstName: row.firstname.trim(),
           lastName: row.lastname.trim(),
@@ -577,7 +579,8 @@ export const importCustomers = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      userId,
+      id: uuidv4(),
+        userId,
       action: 'CREATE',
       entityType: 'Customer',
       entityId: null,
