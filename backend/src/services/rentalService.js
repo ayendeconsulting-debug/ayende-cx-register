@@ -786,7 +786,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
   const mostRentedProducts = await prisma.rental_contract_items.groupBy({
     by: ['productId'],
     where: {
-      contract: whereClause
+      rental_contracts: whereClause
     },
     _sum: { quantity: true },
     _count: { id: true },

@@ -289,6 +289,7 @@ export const importProducts = asyncHandler(async (req, res) => {
           const newCategory = await prisma.category.create({
             data: {
               id: uuidv4(),
+          updatedAt: new Date(),
           businessId,
               name: row.category.trim(),
               description: `Auto-created from bulk import`,
@@ -528,6 +529,7 @@ export const importCustomers = asyncHandler(async (req, res) => {
       const customer = await prisma.customer.create({
         data: {
           id: uuidv4(),
+          updatedAt: new Date(),
           businessId,
           firstName: row.firstname.trim(),
           lastName: row.lastname.trim(),
