@@ -10,7 +10,7 @@ const generateContractNumber = async (businessId) => {
   const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
   
   // Find the last contract number for today
-  const lastContract = await prisma.rentalContract.findFirst({
+  const lastContract = await prisma.rental_contracts.findFirst({
     where: {
       businessId,
       contractNumber: { startsWith: `RNT-${datePrefix}` }
@@ -271,7 +271,7 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
   }
 
   const [contracts, total] = await Promise.all([
-    prisma.rentalContract.findMany({
+    prisma.rental_contracts.findMany({
       where,
       skip,
       take,
@@ -290,7 +290,7 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
         }
       }
     }),
-    prisma.rentalContract.count({ where })
+    prisma.rental_contracts.count({ where })
   ]);
 
   return {
@@ -306,7 +306,7 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
  * Get single rental contract by ID
  */
 export const getRentalContractById = async (businessId, contractId) => {
-  const contract = await prisma.rentalContract.findFirst({
+  const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId },
     include: {
       customer: true,
@@ -338,7 +338,7 @@ export const getRentalContractById = async (businessId, contractId) => {
 export const getOverdueRentals = async (businessId) => {
   const now = new Date();
 
-  const overdueContracts = await prisma.rentalContract.findMany({
+  const overdueContracts = await prisma.rental_contracts.findMany({
     where: {
       businessId,
       status: { in: ['ACTIVE', 'OVERDUE'] },
@@ -395,7 +395,7 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
     recalculateForEarlyReturn = true
   } = returnData;
 
-  const contract = await prisma.rentalContract.findFirst({
+  const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId },
     include: { 
       items: true,
@@ -622,7 +622,7 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
  * Close rental contract
  */
 export const closeRentalContract = async (businessId, contractId, userId, notes) => {
-  const contract = await prisma.rentalContract.findFirst({
+  const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId }
   });
 
@@ -675,7 +675,7 @@ export const closeRentalContract = async (businessId, contractId, userId, notes)
  * Cancel rental contract
  */
 export const cancelRentalContract = async (businessId, contractId, userId, reason) => {
-  const contract = await prisma.rentalContract.findFirst({
+  const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId },
     include: { items: true }
   });
@@ -757,14 +757,14 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
   };
 
   // Get contract counts by status
-  const statusCounts = await prisma.rentalContract.groupBy({
+  const statusCounts = await prisma.rental_contracts.groupBy({
     by: ['status'],
     where: whereClause,
     _count: { id: true }
   });
 
   // Get revenue totals
-  const revenueTotals = await prisma.rentalContract.aggregate({
+  const revenueTotals = await prisma.rental_contracts.aggregate({
     where: {
       ...whereClause,
       status: { in: ['ACTIVE', 'RETURNED', 'CLOSED'] }
@@ -783,7 +783,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
   });
 
   // Get most rented products
-  const mostRentedProducts = await prisma.rentalContractItem.groupBy({
+  const mostRentedProducts = await prisma.rental_contractsItem.groupBy({
     by: ['productId'],
     where: {
       contract: whereClause
@@ -807,7 +807,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
   }));
 
   // Get overdue count
-  const overdueCount = await prisma.rentalContract.count({
+  const overdueCount = await prisma.rental_contracts.count({
     where: {
       businessId,
       status: { in: ['ACTIVE', 'OVERDUE'] },
@@ -816,7 +816,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
   });
 
   // Get active rentals value
-  const activeRentalsValue = await prisma.rentalContract.aggregate({
+  const activeRentalsValue = await prisma.rental_contracts.aggregate({
     where: {
       businessId,
       status: { in: ['ACTIVE', 'OVERDUE', 'PARTIALLY_RETURNED'] }
@@ -844,7 +844,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
     mostRentedProducts: mostRentedWithDetails,
     overdueCount,
     activeRentals: {
-      count: await prisma.rentalContract.count({
+      count: await prisma.rental_contracts.count({
         where: { businessId, status: { in: ['ACTIVE', 'OVERDUE', 'PARTIALLY_RETURNED'] } }
       }),
       value: activeRentalsValue._sum.totalDue || 0,
@@ -868,7 +868,7 @@ export const updateOverdueStatus = async (businessId = null) => {
     whereClause.businessId = businessId;
   }
 
-  const result = await prisma.rentalContract.updateMany({
+  const result = await prisma.rental_contracts.updateMany({
     where: whereClause,
     data: { status: 'OVERDUE' }
   });

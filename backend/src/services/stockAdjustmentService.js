@@ -140,7 +140,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
           stockQuantity: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -249,7 +249,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
           stockQuantity: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -284,7 +284,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
           stockQuantity: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -292,7 +292,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
           username: true,
         },
       },
-      approver: {
+      User_stock_adjustments_approvedByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -373,7 +373,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
           sku: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -381,7 +381,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
           username: true,
         },
       },
-      approver: {
+      User_stock_adjustments_approvedByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -465,7 +465,7 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
             sku: true,
           },
         },
-        creator: {
+        User_stock_adjustments_createdByToUser: {
           select: {
             id: true,
             firstName: true,
@@ -473,7 +473,7 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
             username: true,
           },
         },
-        approver: {
+        User_stock_adjustments_approvedByToUser: {
           select: {
             id: true,
             firstName: true,
@@ -517,7 +517,7 @@ export const getPendingApprovals = async (businessId) => {
           stockQuantity: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -568,7 +568,7 @@ export const getStockAdjustmentById = async (businessId, adjustmentId) => {
           costPrice: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -577,7 +577,7 @@ export const getStockAdjustmentById = async (businessId, adjustmentId) => {
           role: true,
         },
       },
-      approver: {
+      User_stock_adjustments_approvedByToUser: {
         select: {
           id: true,
           firstName: true,
@@ -708,7 +708,7 @@ export const cancelStockAdjustment = async (businessId, adjustmentId, userId) =>
           sku: true,
         },
       },
-      creator: {
+      User_stock_adjustments_createdByToUser: {
         select: {
           id: true,
           firstName: true,
