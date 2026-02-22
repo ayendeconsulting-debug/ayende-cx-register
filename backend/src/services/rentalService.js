@@ -158,7 +158,7 @@ export const createRentalContract = async (businessId, data, userId) => {
       },
       include: {
         items: {
-          include: { product: true }
+          include: { Product: true }
         },
         customer: true
       }
@@ -282,7 +282,7 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
         },
         items: {
           include: {
-            product: { select: { id: true, name: true, sku: true, imageUrl: true } }
+            Product: { select: { id: true, name: true, sku: true, imageUrl: true } }
           }
         },
         returnProcessor: {
@@ -312,7 +312,7 @@ export const getRentalContractById = async (businessId, contractId) => {
       customer: true,
       items: {
         include: {
-          product: true
+          Product: true
         }
       },
       transaction: true,
@@ -350,7 +350,7 @@ export const getOverdueRentals = async (businessId) => {
       },
       items: {
         include: {
-          product: { select: { id: true, name: true, latePenaltyRate: true } }
+          Product: { select: { id: true, name: true, latePenaltyRate: true } }
         }
       }
     },
@@ -578,7 +578,7 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       include: {
         customer: true,
         items: {
-          include: { product: true }
+          include: { Product: true }
         },
         returnProcessor: {
           select: { id: true, firstName: true, lastName: true }
@@ -803,7 +803,7 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
 
   const mostRentedWithDetails = mostRentedProducts.map(item => ({
     ...item,
-    product: products.find(p => p.id === item.productId)
+    Product: products.find(p => p.id === item.productId)
   }));
 
   // Get overdue count

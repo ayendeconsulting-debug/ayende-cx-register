@@ -132,7 +132,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
       createdBy: userId,
     },
     include: {
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,
@@ -175,7 +175,7 @@ const applyStockAdjustment = async (adjustmentId) => {
   const adjustment = await prisma.stockAdjustment.findUnique({
     where: { id: adjustmentId },
     include: {
-      product: true,
+      Product: true,
     },
   });
 
@@ -241,7 +241,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
     },
     include: {
       approval: true,
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,
@@ -276,7 +276,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
       approvedBy: userId,
     },
     include: {
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,
@@ -366,7 +366,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
       approvedBy: userId,
     },
     include: {
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,
@@ -458,7 +458,7 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
         [sortBy]: sortOrder,
       },
       include: {
-        product: {
+        Product: {
           select: {
             id: true,
             name: true,
@@ -509,7 +509,7 @@ export const getPendingApprovals = async (businessId) => {
       createdAt: 'asc',
     },
     include: {
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,
@@ -558,7 +558,7 @@ export const getStockAdjustmentById = async (businessId, adjustmentId) => {
       businessId
     },
     include: {
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,
@@ -701,7 +701,7 @@ export const cancelStockAdjustment = async (businessId, adjustmentId, userId) =>
       status: 'CANCELLED',
     },
     include: {
-      product: {
+      Product: {
         select: {
           id: true,
           name: true,

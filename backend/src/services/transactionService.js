@@ -146,7 +146,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
       include: {
         TransactionItem: {
           include: {
-            product: true,
+            Product: true,
           },
         },
         customer: true,
@@ -320,7 +320,7 @@ export const getAllTransactions = async (businessId, filters = {}) => {
         },
         TransactionItem: {
           include: {
-            product: {
+            Product: {
               select: {
                 id: true,
                 name: true,
@@ -356,7 +356,7 @@ export const getTransactionById = async (businessId, id) => {
       customer: true,
       TransactionItem: {
         include: {
-          product: true,
+          Product: true,
         },
       },
       shift: {

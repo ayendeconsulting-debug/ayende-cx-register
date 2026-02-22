@@ -45,7 +45,7 @@ const sendOverdueNotifications = async () => {
         customer: true,
         business: true,
         items: {
-          include: { product: true }
+          include: { Product: true }
         }
       }
     });
@@ -134,7 +134,7 @@ const sendReminderNotifications = async () => {
         customer: true,
         business: true,
         items: {
-          include: { product: true }
+          include: { Product: true }
         }
       }
     });

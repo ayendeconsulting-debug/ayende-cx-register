@@ -43,7 +43,7 @@ const processQueueItem = async (queueItem) => {
           include: {
             items: {
               include: {
-                product: true,
+                Product: true,
               },
             },
             customer: true,
@@ -96,7 +96,7 @@ const processQueueItem = async (queueItem) => {
           include: {
             items: {
               include: {
-                product: true,
+                Product: true,
               },
             },
             customer: true,
@@ -372,7 +372,7 @@ export const processEntityImmediately = async (entityType, entityId, businessId)
         entity = await prisma.transaction.findUnique({
           where: { id: entityId },
           include: {
-            items: { include: { product: true } },
+            items: { include: { Product: true } },
             customer: true,
             business: true,
           },
@@ -401,7 +401,7 @@ export const processEntityImmediately = async (entityType, entityId, businessId)
         entity = await prisma.rentalContract.findUnique({
           where: { id: entityId },
           include: {
-            items: { include: { product: true } },
+            items: { include: { Product: true } },
             customer: true,
             business: true,
             transaction: true,

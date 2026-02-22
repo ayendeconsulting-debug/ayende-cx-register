@@ -37,7 +37,7 @@ export const generateEndOfDayReport = async (businessId, date = new Date()) => {
       include: {
         items: {
           include: {
-            product: true,
+            Product: true,
           },
         },
         customer: true,

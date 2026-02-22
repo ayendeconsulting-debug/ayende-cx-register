@@ -106,7 +106,7 @@ export const closeShift = async (
       businessId,
     },
     include: {
-      Transactions: {
+      Transaction: {
         where: {
           status: "COMPLETED",
         },
@@ -177,7 +177,7 @@ export const closeShift = async (
           username: true,
         },
       },
-      Transactions: {
+      Transaction: {
         where: {
           status: "COMPLETED",
         },
@@ -254,7 +254,7 @@ export const getAllShifts = async (businessId, filters = {}) => {
         },
         _count: {
           select: {
-            Transactions: true,
+            Transaction: true,
           },
         },
       },
@@ -289,7 +289,7 @@ export const getShiftById = async (businessId, shiftId) => {
           username: true,
         },
       },
-      Transactions: {
+      Transaction: {
         where: {
           status: "COMPLETED",
         },
@@ -335,7 +335,7 @@ export const getCurrentShift = async (businessId, userId) => {
       },
       _count: {
         select: {
-          Transactions: true,
+          Transaction: true,
         },
       },
     },
@@ -362,7 +362,7 @@ export const getShiftReport = async (businessId, shiftId) => {
           username: true,
         },
       },
-      Transactions: {
+      Transaction: {
         where: {
           status: "COMPLETED",
         },
@@ -376,7 +376,7 @@ export const getShiftReport = async (businessId, shiftId) => {
           },
           items: {
             include: {
-              product: {
+              Product: {
                 select: {
                   name: true,
                   Category: {
@@ -509,6 +509,6 @@ export const getShiftReport = async (businessId, shiftId) => {
       variance: shift.variance ? parseFloat(shift.variance) : null,
     },
     topProducts,
-    Transactions: shift.transactions,
+    Transaction: shift.transactions,
   };
 };

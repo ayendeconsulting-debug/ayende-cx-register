@@ -88,7 +88,7 @@ export const syncTransactionToCRM = async (transactionId) => {
         },
         items: {
           include: {
-            product: {
+            Product: {
               select: {
                 id: true,
                 name: true,
