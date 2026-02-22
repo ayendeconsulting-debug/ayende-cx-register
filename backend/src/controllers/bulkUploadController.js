@@ -10,6 +10,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import { AppError } from '../middleware/errorHandler.js';
 import * as syncQueueService from '../services/syncQueueService.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Parse uploaded file (CSV or Excel) to JSON
@@ -287,7 +288,8 @@ export const importProducts = asyncHandler(async (req, res) => {
           // Create new category
           const newCategory = await prisma.category.create({
             data: {
-              businessId,
+              id: uuidv4(),
+          businessId,
               name: row.category.trim(),
               description: `Auto-created from bulk import`,
               isActive: true,
