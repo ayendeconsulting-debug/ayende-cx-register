@@ -20,7 +20,7 @@ const generateAdjustmentNumber = async (businessId) => {
   const today = new Date();
   const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
 
-  const lastAdjustment = await prisma.stockAdjustment.findFirst({
+  const lastAdjustment = await prisma.stock_adjustments.findFirst({
     where: {
       businessId,
       adjustmentNumber: {
@@ -113,7 +113,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
   const adjustmentNumber = await generateAdjustmentNumber(businessId);
 
   // Create adjustment
-  const adjustment = await prisma.stockAdjustment.create({
+  const adjustment = await prisma.stock_adjustments.create({
     data: {
       businessId,
       adjustmentNumber,
@@ -154,7 +154,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
 
   // If needs approval, create approval record
   if (needsApproval) {
-    await prisma.stockAdjustmentApproval.create({
+    await prisma.stock_adjustment_approvals.create({
       data: {
         adjustmentId: adjustment.id,
         status: 'PENDING',
@@ -172,7 +172,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
  * Apply stock adjustment to product inventory
  */
 const applyStockAdjustment = async (adjustmentId) => {
-  const adjustment = await prisma.stockAdjustment.findUnique({
+  const adjustment = await prisma.stock_adjustments.findUnique({
     where: { id: adjustmentId },
     include: {
       Product: true,
@@ -211,7 +211,7 @@ const applyStockAdjustment = async (adjustmentId) => {
   });
 
   // Update adjustment processed timestamp
-  await prisma.stockAdjustment.update({
+  await prisma.stock_adjustments.update({
     where: { id: adjustmentId },
     data: {
       processedAt: new Date(),
@@ -234,7 +234,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
   }
 
   // Get adjustment - must belong to this business
-  const adjustment = await prisma.stockAdjustment.findFirst({
+  const adjustment = await prisma.stock_adjustments.findFirst({
     where: {
       id: adjustmentId,
       businessId
@@ -269,7 +269,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
   }
 
   // Update adjustment status
-  const updatedAdjustment = await prisma.stockAdjustment.update({
+  const updatedAdjustment = await prisma.stock_adjustments.update({
     where: { id: adjustmentId },
     data: {
       status: 'APPROVED',
@@ -304,7 +304,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
   });
 
   // Update approval record
-  await prisma.stockAdjustmentApproval.update({
+  await prisma.stock_adjustment_approvals.update({
     where: { adjustmentId },
     data: {
       status: 'APPROVED',
@@ -340,7 +340,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
   }
 
   // Get adjustment - must belong to this business
-  const adjustment = await prisma.stockAdjustment.findFirst({
+  const adjustment = await prisma.stock_adjustments.findFirst({
     where: {
       id: adjustmentId,
       businessId
@@ -359,7 +359,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
   }
 
   // Update adjustment status
-  const updatedAdjustment = await prisma.stockAdjustment.update({
+  const updatedAdjustment = await prisma.stock_adjustments.update({
     where: { id: adjustmentId },
     data: {
       status: 'REJECTED',
@@ -393,7 +393,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
   });
 
   // Update approval record
-  await prisma.stockAdjustmentApproval.update({
+  await prisma.stock_adjustment_approvals.update({
     where: { adjustmentId },
     data: {
       status: 'REJECTED',
@@ -450,7 +450,7 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
   }
 
   const [adjustments, total] = await Promise.all([
-    prisma.stockAdjustment.findMany({
+    prisma.stock_adjustments.findMany({
       where,
       skip,
       take: parseInt(limit),
@@ -483,7 +483,7 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
         },
       },
     }),
-    prisma.stockAdjustment.count({ where }),
+    prisma.stock_adjustments.count({ where }),
   ]);
 
   return {
@@ -499,7 +499,7 @@ export const getAllStockAdjustments = async (businessId, filters = {}) => {
  * Get pending approvals (for SUPER_ADMIN)
  */
 export const getPendingApprovals = async (businessId) => {
-  const pendingAdjustments = await prisma.stockAdjustment.findMany({
+  const pendingAdjustments = await prisma.stock_adjustments.findMany({
     where: {
       businessId,
       status: 'PENDING',
@@ -537,7 +537,7 @@ export const getPendingApprovals = async (businessId) => {
  * Get count of pending approvals (for notification badge)
  */
 export const getPendingApprovalsCount = async (businessId) => {
-  const count = await prisma.stockAdjustment.count({
+  const count = await prisma.stock_adjustments.count({
     where: {
       businessId,
       status: 'PENDING',
@@ -552,7 +552,7 @@ export const getPendingApprovalsCount = async (businessId) => {
  * Get stock adjustment by ID
  */
 export const getStockAdjustmentById = async (businessId, adjustmentId) => {
-  const adjustment = await prisma.stockAdjustment.findFirst({
+  const adjustment = await prisma.stock_adjustments.findFirst({
     where: { 
       id: adjustmentId,
       businessId
@@ -676,7 +676,7 @@ export const getStockMovementHistory = async (businessId, productId, filters = {
  * Cancel a pending adjustment (creator only)
  */
 export const cancelStockAdjustment = async (businessId, adjustmentId, userId) => {
-  const adjustment = await prisma.stockAdjustment.findFirst({
+  const adjustment = await prisma.stock_adjustments.findFirst({
     where: {
       id: adjustmentId,
       businessId
@@ -695,7 +695,7 @@ export const cancelStockAdjustment = async (businessId, adjustmentId, userId) =>
     throw new AppError('Only pending adjustments can be cancelled', 400);
   }
 
-  const updatedAdjustment = await prisma.stockAdjustment.update({
+  const updatedAdjustment = await prisma.stock_adjustments.update({
     where: { id: adjustmentId },
     data: {
       status: 'CANCELLED',
