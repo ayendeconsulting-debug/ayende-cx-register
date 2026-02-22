@@ -152,15 +152,15 @@ export const createRentalContract = async (businessId, data, userId) => {
         contactPhone,
         contactEmail,
         deliveryAddress,
-        items: {
+        rental_contract_items: {
           create: validatedItems
         }
       },
       include: {
-        items: {
+        rental_contract_items: {
           include: { Product: true }
         },
-        customer: true
+        Customer: true
       }
     });
 
@@ -264,9 +264,9 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
   if (search) {
     where.OR = [
       { contractNumber: { contains: search, mode: 'insensitive' } },
-      { customer: { firstName: { contains: search, mode: 'insensitive' } } },
-      { customer: { lastName: { contains: search, mode: 'insensitive' } } },
-      { customer: { phone: { contains: search, mode: 'insensitive' } } }
+      { Customer: { firstName: { contains: search, mode: 'insensitive' } } },
+      { Customer: { lastName: { contains: search, mode: 'insensitive' } } },
+      { Customer: { phone: { contains: search, mode: 'insensitive' } } }
     ];
   }
 
@@ -277,15 +277,15 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
       take,
       orderBy: { [sortBy]: sortOrder },
       include: {
-        customer: {
+        Customer: {
           select: { id: true, firstName: true, lastName: true, email: true, phone: true }
         },
-        items: {
+        rental_contract_items: {
           include: {
             Product: { select: { id: true, name: true, sku: true, imageUrl: true } }
           }
         },
-        returnProcessor: {
+        User: {
           select: { id: true, firstName: true, lastName: true }
         }
       }
@@ -309,14 +309,14 @@ export const getRentalContractById = async (businessId, contractId) => {
   const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId },
     include: {
-      customer: true,
-      items: {
+      Customer: true,
+      rental_contract_items: {
         include: {
           Product: true
         }
       },
       transaction: true,
-      returnProcessor: {
+      User: {
         select: { id: true, firstName: true, lastName: true, email: true }
       },
       business: {
@@ -345,10 +345,10 @@ export const getOverdueRentals = async (businessId) => {
       expectedReturnDate: { lt: now }
     },
     include: {
-      customer: {
+      Customer: {
         select: { id: true, firstName: true, lastName: true, email: true, phone: true }
       },
-      items: {
+      rental_contract_items: {
         include: {
           Product: { select: { id: true, name: true, latePenaltyRate: true } }
         }
@@ -398,7 +398,7 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
   const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId },
     include: { 
-      items: true,
+      rental_contract_items: true,
       business: {
         select: { currency: true, currencyCode: true }
       }
@@ -576,11 +576,11 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
         balanceDue: Math.max(0, rentalBalanceDue - (depositAmount - depositToReturn))
       },
       include: {
-        customer: true,
-        items: {
+        Customer: true,
+        rental_contract_items: {
           include: { Product: true }
         },
-        returnProcessor: {
+        User: {
           select: { id: true, firstName: true, lastName: true }
         }
       }
@@ -647,8 +647,8 @@ export const closeRentalContract = async (businessId, contractId, userId, notes)
         returnNotes: notes ? `${contract.returnNotes || ''}\nClosed: ${notes}` : contract.returnNotes
       },
       include: {
-        customer: true,
-        items: true
+        Customer: true,
+        rental_contract_items: true
       }
     });
 
@@ -677,7 +677,7 @@ export const closeRentalContract = async (businessId, contractId, userId, notes)
 export const cancelRentalContract = async (businessId, contractId, userId, reason) => {
   const contract = await prisma.rental_contracts.findFirst({
     where: { id: contractId, businessId },
-    include: { items: true }
+    include: { rental_contract_items: true }
   });
 
   if (!contract) {

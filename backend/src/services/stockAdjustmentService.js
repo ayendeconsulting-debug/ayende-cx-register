@@ -240,7 +240,7 @@ export const approveStockAdjustment = async (businessId, adjustmentId, userId, a
       businessId
     },
     include: {
-      approval: true,
+      stock_adjustment_approvals: true,
       Product: {
         select: {
           id: true,
@@ -346,7 +346,7 @@ export const rejectStockAdjustment = async (businessId, adjustmentId, userId, re
       businessId
     },
     include: {
-      approval: true,
+      stock_adjustment_approvals: true,
     },
   });
 
@@ -526,7 +526,7 @@ export const getPendingApprovals = async (businessId) => {
           role: true,
         },
       },
-      approval: true,
+      stock_adjustment_approvals: true,
     },
   });
 
@@ -585,7 +585,7 @@ export const getStockAdjustmentById = async (businessId, adjustmentId) => {
           username: true,
         },
       },
-      approval: true,
+      stock_adjustment_approvals: true,
       movementHistory: true,
     },
   });
