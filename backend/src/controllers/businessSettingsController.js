@@ -1,7 +1,7 @@
 import prisma from '../config/database.js';
 
 /**
- * Get business settings/theme
+ * Get business settings including config
  */
 export const getBusinessSettings = async (req, res) => {
   try {
@@ -9,42 +9,8 @@ export const getBusinessSettings = async (req, res) => {
 
     const business = await prisma.business.findUnique({
       where: { id: businessId },
-      select: {
-        id: true,
-        businessName: true,
-        subdomain: true,
-        businessEmail: true,
-        businessPhone: true,
-        businessAddress: true,
-        businessCity: true,
-        businessState: true,
-        businessZipCode: true,
-        businessCountry: true,
-        businessWebsite: true,
-        logoUrl: true,
-        primaryColor: true,
-        secondaryColor: true,
-        currency: true,
-        currencyCode: true,
-        currencyPosition: true,
-        decimalSeparator: true,
-        thousandsSeparator: true,
-        decimalPlaces: true,
-        timezone: true,
-        dateFormat: true,
-        timeFormat: true,
-        taxEnabled: true,
-        taxRate: true,
-        taxLabel: true,
-        taxNumber: true,
-        receiptHeader: true,
-        receiptFooter: true,
-        loyaltyEnabled: true,
-        isActive: true,
-        subscriptionTier: true,
-        subscriptionExpiry: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
+        config: true, // Include BusinessConfig
       },
     });
 
@@ -55,9 +21,52 @@ export const getBusinessSettings = async (req, res) => {
       });
     }
 
+    // Combine business and config data for frontend
+    const combinedSettings = {
+      id: business.id,
+      name: business.name,
+      subdomain: business.subdomain,
+      owner_name: business.owner_name,
+      owner_email: business.owner_email,
+      owner_phone: business.owner_phone,
+      business_type: business.business_type,
+      logoUrl: business.logo_url,
+      primaryColor: business.primary_color,
+      secondaryColor: business.secondary_color,
+      address: business.address,
+      city: business.city,
+      state: business.state,
+      country: business.country,
+      postal_code: business.postal_code,
+      is_active: business.is_active,
+      subscription_tier: business.subscription_tier,
+      createdAt: business.createdAt,
+      updatedAt: business.updatedAt,
+      
+      // Config settings
+      config: business.config || {},
+      
+      // Currency settings (from config)
+      currency: business.config?.default_currency || 'NGN',
+      currencyCode: business.config?.default_currency || 'NGN',
+      multiCurrencyEnabled: business.config?.multi_currency_enabled || false,
+      supportedCurrencies: business.config?.supported_currencies || ['NGN'],
+      
+      // Tax settings (from config)
+      taxEnabled: business.config?.tax_enabled || true,
+      taxRate: business.config?.tax_rate || 0,
+      
+      // Feature flags (from config)
+      inventoryEnabled: business.config?.inventory_enabled || false,
+      loyaltyEnabled: business.config?.loyalty_enabled || true,
+      rentalContracts: business.config?.rental_contracts || false,
+      appointmentBooking: business.config?.appointment_booking || false,
+      tableManagement: business.config?.table_management || false,
+    };
+
     res.json({
       success: true,
-      data: business,
+      data: combinedSettings,
     });
   } catch (error) {
     console.error('Error fetching business settings:', error);
@@ -95,19 +104,19 @@ export const updateBusinessTheme = async (req, res) => {
     }
 
     const updateData = {};
-    if (primaryColor) updateData.primaryColor = primaryColor;
-    if (secondaryColor) updateData.secondaryColor = secondaryColor;
-    if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
+    if (primaryColor) updateData.primary_color = primaryColor;
+    if (secondaryColor) updateData.secondary_color = secondaryColor;
+    if (logoUrl !== undefined) updateData.logo_url = logoUrl;
 
     const updatedBusiness = await prisma.business.update({
       where: { id: businessId },
       data: updateData,
       select: {
         id: true,
-        businessName: true,
-        primaryColor: true,
-        secondaryColor: true,
-        logoUrl: true,
+        name: true,
+        primary_color: true,
+        secondary_color: true,
+        logo_url: true,
         updatedAt: true,
       },
     });
@@ -134,48 +143,42 @@ export const updateBusinessInfo = async (req, res) => {
   try {
     const { businessId } = req.user;
     const {
-      businessName,
-      businessEmail,
-      businessPhone,
-      businessAddress,
-      businessCity,
-      businessState,
-      businessZipCode,
-      businessCountry,
-      businessWebsite,
-      receiptHeader,
-      receiptFooter,
+      name,
+      owner_name,
+      owner_email,
+      owner_phone,
+      address,
+      city,
+      state,
+      country,
+      postal_code,
     } = req.body;
 
     const updateData = {};
-    if (businessName) updateData.businessName = businessName;
-    if (businessEmail !== undefined) updateData.businessEmail = businessEmail;
-    if (businessPhone !== undefined) updateData.businessPhone = businessPhone;
-    if (businessAddress !== undefined) updateData.businessAddress = businessAddress;
-    if (businessCity !== undefined) updateData.businessCity = businessCity;
-    if (businessState !== undefined) updateData.businessState = businessState;
-    if (businessZipCode !== undefined) updateData.businessZipCode = businessZipCode;
-    if (businessCountry !== undefined) updateData.businessCountry = businessCountry;
-    if (businessWebsite !== undefined) updateData.businessWebsite = businessWebsite;
-    if (receiptHeader !== undefined) updateData.receiptHeader = receiptHeader;
-    if (receiptFooter !== undefined) updateData.receiptFooter = receiptFooter;
+    if (name) updateData.name = name;
+    if (owner_name) updateData.owner_name = owner_name;
+    if (owner_email !== undefined) updateData.owner_email = owner_email;
+    if (owner_phone !== undefined) updateData.owner_phone = owner_phone;
+    if (address !== undefined) updateData.address = address;
+    if (city !== undefined) updateData.city = city;
+    if (state !== undefined) updateData.state = state;
+    if (country !== undefined) updateData.country = country;
+    if (postal_code !== undefined) updateData.postal_code = postal_code;
 
     const updatedBusiness = await prisma.business.update({
       where: { id: businessId },
       data: updateData,
       select: {
         id: true,
-        businessName: true,
-        businessEmail: true,
-        businessPhone: true,
-        businessAddress: true,
-        businessCity: true,
-        businessState: true,
-        businessZipCode: true,
-        businessCountry: true,
-        businessWebsite: true,
-        receiptHeader: true,
-        receiptFooter: true,
+        name: true,
+        owner_name: true,
+        owner_email: true,
+        owner_phone: true,
+        address: true,
+        city: true,
+        state: true,
+        country: true,
+        postal_code: true,
         updatedAt: true,
       },
     });
@@ -201,31 +204,45 @@ export const updateBusinessInfo = async (req, res) => {
 export const updateTaxSettings = async (req, res) => {
   try {
     const { businessId } = req.user;
-    const { taxEnabled, taxRate, taxLabel, taxNumber } = req.body;
+    const { taxEnabled, taxRate, taxLabel, taxExemptServices } = req.body;
 
-    const updateData = {};
-    if (taxEnabled !== undefined) updateData.taxEnabled = taxEnabled;
-    if (taxRate !== undefined) updateData.taxRate = taxRate;
-    if (taxLabel !== undefined) updateData.taxLabel = taxLabel;
-    if (taxNumber !== undefined) updateData.taxNumber = taxNumber;
-
-    const updatedBusiness = await prisma.business.update({
-      where: { id: businessId },
-      data: updateData,
-      select: {
-        id: true,
-        taxEnabled: true,
-        taxRate: true,
-        taxLabel: true,
-        taxNumber: true,
-        updatedAt: true,
-      },
+    // Get or create BusinessConfig
+    let config = await prisma.businessConfig.findUnique({
+      where: { business_id: businessId },
     });
+
+    if (!config) {
+      // Create config if it doesn't exist
+      config = await prisma.businessConfig.create({
+        data: {
+          business_id: businessId,
+          tax_enabled: taxEnabled !== undefined ? taxEnabled : true,
+          tax_rate: taxRate !== undefined ? taxRate : 0,
+          tax_exempt_services: taxExemptServices !== undefined ? taxExemptServices : false,
+        },
+      });
+    } else {
+      // Update existing config
+      const updateData = {};
+      if (taxEnabled !== undefined) updateData.tax_enabled = taxEnabled;
+      if (taxRate !== undefined) updateData.tax_rate = taxRate;
+      if (taxExemptServices !== undefined) updateData.tax_exempt_services = taxExemptServices;
+
+      config = await prisma.businessConfig.update({
+        where: { business_id: businessId },
+        data: updateData,
+      });
+    }
 
     res.json({
       success: true,
       message: 'Tax settings updated successfully',
-      data: updatedBusiness,
+      data: {
+        tax_enabled: config.tax_enabled,
+        tax_rate: config.tax_rate,
+        tax_exempt_services: config.tax_exempt_services,
+        updatedAt: config.updatedAt,
+      },
     });
   } catch (error) {
     console.error('Error updating tax settings:', error);
@@ -239,80 +256,96 @@ export const updateTaxSettings = async (req, res) => {
 
 /**
  * Update currency settings
- * CORRECTED: Updates Business table which has all currency fields in production
+ * FIXED: Now updates BusinessConfig instead of Business model
  */
 export const updateCurrencySettings = async (req, res) => {
   try {
     const { businessId } = req.user;
     const { 
-      currency, 
-      currencyCode, 
-      currencyPosition, 
-      decimalSeparator, 
-      thousandsSeparator, 
-      decimalPlaces 
+      currency,
+      currencyCode,
+      multiCurrencyEnabled,
+      supportedCurrencies
     } = req.body;
 
     // Validate required fields
-    if (!currency || !currencyCode) {
+    if (!currency && !currencyCode) {
       return res.status(400).json({
         success: false,
-        message: 'Currency symbol and code are required',
+        message: 'Currency code is required',
       });
     }
+
+    // Use currency or currencyCode (they should be the same)
+    const currencyValue = (currency || currencyCode).toUpperCase();
 
     // Validate currency code format (3 uppercase letters)
-    if (!/^[A-Z]{3}$/.test(currencyCode.toUpperCase())) {
+    if (!/^[A-Z]{3}$/.test(currencyValue)) {
       return res.status(400).json({
         success: false,
-        message: 'Currency code must be 3 letters (e.g., USD, NGN, ZAR)',
+        message: 'Currency code must be 3 letters (e.g., USD, NGN, ZAR, KES, GHS)',
       });
     }
 
-    // Validate currency position
-    if (currencyPosition && !['before', 'after'].includes(currencyPosition)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Currency position must be "before" or "after"',
-      });
-    }
-
-    // Validate decimal places
-    if (decimalPlaces !== undefined && (decimalPlaces < 0 || decimalPlaces > 4)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Decimal places must be between 0 and 4',
-      });
-    }
-
-    const updateData = {
-      currency: currency,
-      currencyCode: currencyCode.toUpperCase(),
-      currencyPosition: currencyPosition || 'before',
-      decimalSeparator: decimalSeparator || '.',
-      thousandsSeparator: thousandsSeparator ?? ',',
-      decimalPlaces: decimalPlaces ?? 2,
-    };
-
-    const updatedBusiness = await prisma.business.update({
-      where: { id: businessId },
-      data: updateData,
-      select: {
-        id: true,
-        currency: true,
-        currencyCode: true,
-        currencyPosition: true,
-        decimalSeparator: true,
-        thousandsSeparator: true,
-        decimalPlaces: true,
-        updatedAt: true,
-      },
+    // Get or create BusinessConfig
+    let config = await prisma.businessConfig.findUnique({
+      where: { business_id: businessId },
     });
+
+    if (!config) {
+      // Create config if it doesn't exist
+      config = await prisma.businessConfig.create({
+        data: {
+          business_id: businessId,
+          default_currency: currencyValue,
+          multi_currency_enabled: multiCurrencyEnabled || false,
+          supported_currencies: supportedCurrencies || [currencyValue],
+        },
+      });
+    } else {
+      // Update existing config
+      const updateData = {
+        default_currency: currencyValue,
+      };
+
+      if (multiCurrencyEnabled !== undefined) {
+        updateData.multi_currency_enabled = multiCurrencyEnabled;
+      }
+
+      if (supportedCurrencies !== undefined) {
+        // Ensure default currency is in supported currencies
+        const currencies = Array.isArray(supportedCurrencies) 
+          ? supportedCurrencies 
+          : [currencyValue];
+        
+        if (!currencies.includes(currencyValue)) {
+          currencies.push(currencyValue);
+        }
+        
+        updateData.supported_currencies = currencies;
+      } else {
+        // If not provided, ensure default currency is in the list
+        const currentCurrencies = config.supported_currencies || [];
+        if (!currentCurrencies.includes(currencyValue)) {
+          updateData.supported_currencies = [...currentCurrencies, currencyValue];
+        }
+      }
+
+      config = await prisma.businessConfig.update({
+        where: { business_id: businessId },
+        data: updateData,
+      });
+    }
 
     res.json({
       success: true,
       message: 'Currency settings updated successfully',
-      data: updatedBusiness,
+      data: {
+        default_currency: config.default_currency,
+        multi_currency_enabled: config.multi_currency_enabled,
+        supported_currencies: config.supported_currencies,
+        updatedAt: config.updatedAt,
+      },
     });
   } catch (error) {
     console.error('Error updating currency settings:', error);

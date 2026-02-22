@@ -154,7 +154,7 @@ export const login = asyncHandler(async (req, res) => {
       isActive: true
     },
     include: {
-      Business: true
+      business: true
     }
   });
 
@@ -171,7 +171,7 @@ export const login = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
-  console.log('[LOGIN SUCCESS]', `${user.username} logged into ${user.Business.businessName}`);
+  console.log('[LOGIN SUCCESS]', `${user.username} logged into ${user.business.businessName}`);
 
   // Update last login
   await prisma.user.update({
@@ -190,7 +190,6 @@ export const login = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      id: crypto.randomUUID(),
       userId: user.id,
       action: 'LOGIN',
       entityType: 'User',
@@ -209,27 +208,27 @@ export const login = asyncHandler(async (req, res) => {
       businessId: user.businessId,
     },
     business: {
-      id: user.Business.id,
-      name: user.Business.businessName,
-      subdomain: user.Business.subdomain,
+      id: user.business.id,
+      name: user.business.businessName,
+      subdomain: user.business.subdomain,
       // Currency settings
-      currency: user.Business.currency,
-      currencyCode: user.Business.currencyCode,
-      currencyPosition: user.Business.currencyPosition || 'before',
-      decimalSeparator: user.Business.decimalSeparator || '.',
-      thousandsSeparator: user.Business.thousandsSeparator || ',',
-      decimalPlaces: user.Business.decimalPlaces ?? 2,
+      currency: user.business.currency,
+      currencyCode: user.business.currencyCode,
+      currencyPosition: user.business.currencyPosition || 'before',
+      decimalSeparator: user.business.decimalSeparator || '.',
+      thousandsSeparator: user.business.thousandsSeparator || ',',
+      decimalPlaces: user.business.decimalPlaces ?? 2,
       // Tax settings
-      taxRate: user.Business.taxRate,
-      taxLabel: user.Business.taxLabel,
-      taxEnabled: user.Business.taxEnabled,
+      taxRate: user.business.taxRate,
+      taxLabel: user.business.taxLabel,
+      taxEnabled: user.business.taxEnabled,
       // Theme settings
-      primaryColor: user.Business.primaryColor,
-      secondaryColor: user.Business.secondaryColor,
-      logoUrl: user.Business.logoUrl,
+      primaryColor: user.business.primaryColor,
+      secondaryColor: user.business.secondaryColor,
+      logoUrl: user.business.logoUrl,
       // Feature flags
-      rentalEnabled: user.Business.rentalEnabled,
-      loyaltyEnabled: user.Business.loyaltyEnabled,
+      rentalEnabled: user.business.rentalEnabled,
+      loyaltyEnabled: user.business.loyaltyEnabled,
     },
     accessToken,
     refreshToken,
@@ -255,7 +254,7 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
     include: {
-      Business: true
+      business: true
     }
   });
 
@@ -276,23 +275,23 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
     refreshToken: newRefreshToken,
     // Include updated business settings on token refresh
     business: {
-      id: user.Business.id,
-      name: user.Business.businessName,
-      subdomain: user.Business.subdomain,
-      currency: user.Business.currency,
-      currencyCode: user.Business.currencyCode,
-      currencyPosition: user.Business.currencyPosition || 'before',
-      decimalSeparator: user.Business.decimalSeparator || '.',
-      thousandsSeparator: user.Business.thousandsSeparator || ',',
-      decimalPlaces: user.Business.decimalPlaces ?? 2,
-      taxRate: user.Business.taxRate,
-      taxLabel: user.Business.taxLabel,
-      taxEnabled: user.Business.taxEnabled,
-      primaryColor: user.Business.primaryColor,
-      secondaryColor: user.Business.secondaryColor,
-      logoUrl: user.Business.logoUrl,
-      rentalEnabled: user.Business.rentalEnabled,
-      loyaltyEnabled: user.Business.loyaltyEnabled,
+      id: user.business.id,
+      name: user.business.businessName,
+      subdomain: user.business.subdomain,
+      currency: user.business.currency,
+      currencyCode: user.business.currencyCode,
+      currencyPosition: user.business.currencyPosition || 'before',
+      decimalSeparator: user.business.decimalSeparator || '.',
+      thousandsSeparator: user.business.thousandsSeparator || ',',
+      decimalPlaces: user.business.decimalPlaces ?? 2,
+      taxRate: user.business.taxRate,
+      taxLabel: user.business.taxLabel,
+      taxEnabled: user.business.taxEnabled,
+      primaryColor: user.business.primaryColor,
+      secondaryColor: user.business.secondaryColor,
+      logoUrl: user.business.logoUrl,
+      rentalEnabled: user.business.rentalEnabled,
+      loyaltyEnabled: user.business.loyaltyEnabled,
     },
   }, 'Token refreshed successfully');
 });
@@ -316,7 +315,7 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
       isActive: true,
       lastLogin: true,
       createdAt: true,
-      Business: {
+      business: {
         select: {
           id: true,
           businessName: true,
@@ -353,7 +352,6 @@ export const logout = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      id: crypto.randomUUID(),
       userId: req.user.id,
       action: 'LOGOUT',
       entityType: 'User',
@@ -399,7 +397,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   const user = await prisma.user.findFirst({
     where: whereClause,
     include: {
-      Business: true
+      business: true
     }
   });
 
@@ -438,7 +436,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      businessName: user.Business.businessName,
+      businessName: user.business.businessName,
       resetUrl,
       expiresIn: '1 hour',
     });
@@ -511,7 +509,6 @@ export const resetPassword = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      id: crypto.randomUUID(),
       userId: user.id,
       action: 'UPDATE',
       entityType: 'User',
@@ -565,7 +562,6 @@ export const changePassword = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      id: crypto.randomUUID(),
       userId: user.id,
       action: 'UPDATE',
       entityType: 'User',

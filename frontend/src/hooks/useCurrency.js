@@ -27,25 +27,26 @@ const CURRENCY_CONFIG = {
 
 /**
  * Custom hook for currency formatting using business settings
- * Reads from Redux auth state (business object)
- * CORRECTED: Now reads from Business table fields directly
+ * Reads from Redux auth state (business object with config)
  */
 export const useCurrency = () => {
   const { business } = useSelector((state) => state.auth);
 
   const currencySettings = useMemo(() => {
-    // Business table has these fields directly: currency, currencyCode, currencyPosition, etc.
-    const currencyCode = business?.currencyCode || 'USD';
-    const currencyDef = CURRENCY_CONFIG[currencyCode] || CURRENCY_CONFIG['USD'];
+    // Get currency code from business config
+    const currencyCode = business?.currency || business?.currencyCode || 'NGN';
+    const currencyDef = CURRENCY_CONFIG[currencyCode] || CURRENCY_CONFIG['NGN'];
 
     return {
       code: currencyCode,
-      symbol: business?.currency || currencyDef.symbol,
+      symbol: currencyDef.symbol,
       name: currencyDef.name,
-      position: business?.currencyPosition || 'before',
-      decimalSeparator: business?.decimalSeparator || '.',
-      thousandsSeparator: business?.thousandsSeparator || ',',
-      decimalPlaces: business?.decimalPlaces ?? 2,
+      position: currencyDef.position,
+      decimalSeparator: '.',
+      thousandsSeparator: ',',
+      decimalPlaces: currencyDef.decimals,
+      multiCurrencyEnabled: business?.multiCurrencyEnabled || false,
+      supportedCurrencies: business?.supportedCurrencies || [currencyCode],
     };
   }, [business]);
 
@@ -62,15 +63,13 @@ export const useCurrency = () => {
     // Use specific currency or default
     const code = currencyCode || currencySettings.code;
     const currencyDef = CURRENCY_CONFIG[code] || CURRENCY_CONFIG[currencySettings.code];
-    const symbol = currencyCode ? currencyDef.symbol : currencySettings.symbol;
-    const position = currencyCode ? currencyDef.position : currencySettings.position;
-    const decimals = currencyCode ? currencyDef.decimals : currencySettings.decimalPlaces;
+    const decimals = currencyDef.decimals;
     
     if (isNaN(numAmount)) {
       return showSymbol 
-        ? (position === 'before' 
-            ? `${symbol}0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}`
-            : `0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}${symbol}`)
+        ? (currencyDef.position === 'before' 
+            ? `${currencyDef.symbol}0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}`
+            : `0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}${currencyDef.symbol}`)
         : `0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}`;
     }
 
@@ -93,10 +92,10 @@ export const useCurrency = () => {
       return signedFormatted;
     }
 
-    if (position === 'before') {
-      return `${symbol}${signedFormatted}`;
+    if (currencyDef.position === 'before') {
+      return `${currencyDef.symbol}${signedFormatted}`;
     } else {
-      return `${signedFormatted}${symbol}`;
+      return `${signedFormatted}${currencyDef.symbol}`;
     }
   };
 
@@ -124,13 +123,25 @@ export const useCurrency = () => {
    * @returns {object} Currency configuration
    */
   const getCurrencyInfo = (code) => {
-    return CURRENCY_CONFIG[code] || CURRENCY_CONFIG['USD'];
+    return CURRENCY_CONFIG[code] || CURRENCY_CONFIG['NGN'];
+  };
+
+  /**
+   * Get list of supported currencies for multi-currency businesses
+   * @returns {array} Array of currency objects
+   */
+  const getSupportedCurrencies = () => {
+    return currencySettings.supportedCurrencies.map(code => ({
+      code,
+      ...CURRENCY_CONFIG[code],
+    }));
   };
 
   return {
     formatCurrency,
     parseCurrency,
     getCurrencyInfo,
+    getSupportedCurrencies,
     currencySettings,
     symbol: currencySettings.symbol,
     code: currencySettings.code,
@@ -142,8 +153,8 @@ export const useCurrency = () => {
  * Standalone format function for use outside React components
  * Uses provided settings or defaults
  */
-export const formatCurrencyStandalone = (amount, currencyCode = 'USD') => {
-  const currencyDef = CURRENCY_CONFIG[currencyCode] || CURRENCY_CONFIG['USD'];
+export const formatCurrencyStandalone = (amount, currencyCode = 'NGN') => {
+  const currencyDef = CURRENCY_CONFIG[currencyCode] || CURRENCY_CONFIG['NGN'];
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
   
   if (isNaN(numAmount)) {
