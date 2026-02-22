@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency'; 
 import StockAdjustmentForm from '../components/StockAdjustmentForm';
 import StockMovementHistory from '../components/StockMovementHistory';
 import toast from 'react-hot-toast';
