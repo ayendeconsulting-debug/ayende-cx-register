@@ -1,47 +1,86 @@
 import { useSelector } from 'react-redux';
 import { useMemo } from 'react';
 
+// Currency definitions with symbols and formatting
+const CURRENCY_CONFIG = {
+  // African currencies
+  NGN: { symbol: '₦', name: 'Nigerian Naira', position: 'before', decimals: 2 },
+  ZAR: { symbol: 'R', name: 'South African Rand', position: 'before', decimals: 2 },
+  KES: { symbol: 'KSh', name: 'Kenyan Shilling', position: 'before', decimals: 2 },
+  GHS: { symbol: '₵', name: 'Ghanaian Cedi', position: 'before', decimals: 2 },
+  TZS: { symbol: 'TSh', name: 'Tanzanian Shilling', position: 'before', decimals: 2 },
+  UGX: { symbol: 'USh', name: 'Ugandan Shilling', position: 'before', decimals: 0 },
+  XOF: { symbol: 'CFA', name: 'West African CFA Franc', position: 'before', decimals: 0 },
+  XAF: { symbol: 'FCFA', name: 'Central African CFA Franc', position: 'before', decimals: 0 },
+  EGP: { symbol: 'E£', name: 'Egyptian Pound', position: 'before', decimals: 2 },
+  MAD: { symbol: 'د.م.', name: 'Moroccan Dirham', position: 'before', decimals: 2 },
+  RWF: { symbol: 'FRw', name: 'Rwandan Franc', position: 'before', decimals: 0 },
+  
+  // Major currencies
+  USD: { symbol: '$', name: 'US Dollar', position: 'before', decimals: 2 },
+  EUR: { symbol: '€', name: 'Euro', position: 'before', decimals: 2 },
+  GBP: { symbol: '£', name: 'British Pound', position: 'before', decimals: 2 },
+  CAD: { symbol: 'C$', name: 'Canadian Dollar', position: 'before', decimals: 2 },
+  BRL: { symbol: 'R$', name: 'Brazilian Real', position: 'before', decimals: 2 },
+  MXN: { symbol: 'Mex$', name: 'Mexican Peso', position: 'before', decimals: 2 },
+};
+
 /**
  * Custom hook for currency formatting using business settings
- * Uses settings from Redux auth state (business object)
+ * Reads from Redux auth state (business object with config)
  */
 export const useCurrency = () => {
   const { business } = useSelector((state) => state.auth);
 
-  const currencySettings = useMemo(() => ({
-    symbol: business?.currency || '$',
-    code: business?.currencyCode || 'USD',
-    position: business?.currencyPosition || 'before',
-    decimalSeparator: business?.decimalSeparator || '.',
-    thousandsSeparator: business?.thousandsSeparator || ',',
-    decimalPlaces: business?.decimalPlaces ?? 2,
-  }), [business]);
+  const currencySettings = useMemo(() => {
+    // Get currency code from business config
+    const currencyCode = business?.currency || business?.currencyCode || 'NGN';
+    const currencyDef = CURRENCY_CONFIG[currencyCode] || CURRENCY_CONFIG['NGN'];
+
+    return {
+      code: currencyCode,
+      symbol: currencyDef.symbol,
+      name: currencyDef.name,
+      position: currencyDef.position,
+      decimalSeparator: '.',
+      thousandsSeparator: ',',
+      decimalPlaces: currencyDef.decimals,
+      multiCurrencyEnabled: business?.multiCurrencyEnabled || false,
+      supportedCurrencies: business?.supportedCurrencies || [currencyCode],
+    };
+  }, [business]);
 
   /**
    * Format a number as currency using business settings
    * @param {number|string} amount - The amount to format
    * @param {boolean} showSymbol - Whether to show the currency symbol (default: true)
+   * @param {string} currencyCode - Optional specific currency code to use
    * @returns {string} Formatted currency string
    */
-  const formatCurrency = (amount, showSymbol = true) => {
+  const formatCurrency = (amount, showSymbol = true, currencyCode = null) => {
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    
+    // Use specific currency or default
+    const code = currencyCode || currencySettings.code;
+    const currencyDef = CURRENCY_CONFIG[code] || CURRENCY_CONFIG[currencySettings.code];
+    const decimals = currencyDef.decimals;
     
     if (isNaN(numAmount)) {
       return showSymbol 
-        ? (currencySettings.position === 'before' 
-            ? `${currencySettings.symbol}0${currencySettings.decimalSeparator}${'0'.repeat(currencySettings.decimalPlaces)}`
-            : `0${currencySettings.decimalSeparator}${'0'.repeat(currencySettings.decimalPlaces)}${currencySettings.symbol}`)
-        : `0${currencySettings.decimalSeparator}${'0'.repeat(currencySettings.decimalPlaces)}`;
+        ? (currencyDef.position === 'before' 
+            ? `${currencyDef.symbol}0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}`
+            : `0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}${currencyDef.symbol}`)
+        : `0${currencySettings.decimalSeparator}${'0'.repeat(decimals)}`;
     }
 
     // Format the number
-    const parts = Math.abs(numAmount).toFixed(currencySettings.decimalPlaces).split('.');
+    const parts = Math.abs(numAmount).toFixed(decimals).split('.');
     
     // Add thousands separator
     const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, currencySettings.thousandsSeparator);
     
     // Combine integer and decimal parts
-    const formatted = currencySettings.decimalPlaces > 0 
+    const formatted = decimals > 0 
       ? `${integerPart}${currencySettings.decimalSeparator}${parts[1]}`
       : integerPart;
 
@@ -53,10 +92,10 @@ export const useCurrency = () => {
       return signedFormatted;
     }
 
-    if (currencySettings.position === 'before') {
-      return `${currencySettings.symbol}${signedFormatted}`;
+    if (currencyDef.position === 'before') {
+      return `${currencyDef.symbol}${signedFormatted}`;
     } else {
-      return `${signedFormatted}${currencySettings.symbol}`;
+      return `${signedFormatted}${currencyDef.symbol}`;
     }
   };
 
@@ -78,12 +117,35 @@ export const useCurrency = () => {
     return parseFloat(cleaned) || 0;
   };
 
+  /**
+   * Get currency info for a specific currency code
+   * @param {string} code - Currency code
+   * @returns {object} Currency configuration
+   */
+  const getCurrencyInfo = (code) => {
+    return CURRENCY_CONFIG[code] || CURRENCY_CONFIG['NGN'];
+  };
+
+  /**
+   * Get list of supported currencies for multi-currency businesses
+   * @returns {array} Array of currency objects
+   */
+  const getSupportedCurrencies = () => {
+    return currencySettings.supportedCurrencies.map(code => ({
+      code,
+      ...CURRENCY_CONFIG[code],
+    }));
+  };
+
   return {
     formatCurrency,
     parseCurrency,
+    getCurrencyInfo,
+    getSupportedCurrencies,
     currencySettings,
     symbol: currencySettings.symbol,
     code: currencySettings.code,
+    name: currencySettings.name,
   };
 };
 
@@ -91,35 +153,28 @@ export const useCurrency = () => {
  * Standalone format function for use outside React components
  * Uses provided settings or defaults
  */
-export const formatCurrencyStandalone = (amount, settings = {}) => {
-  const {
-    symbol = '$',
-    position = 'before',
-    decimalSeparator = '.',
-    thousandsSeparator = ',',
-    decimalPlaces = 2,
-  } = settings;
-
+export const formatCurrencyStandalone = (amount, currencyCode = 'NGN') => {
+  const currencyDef = CURRENCY_CONFIG[currencyCode] || CURRENCY_CONFIG['NGN'];
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
   
   if (isNaN(numAmount)) {
-    return position === 'before' 
-      ? `${symbol}0${decimalSeparator}${'0'.repeat(decimalPlaces)}`
-      : `0${decimalSeparator}${'0'.repeat(decimalPlaces)}${symbol}`;
+    return currencyDef.position === 'before' 
+      ? `${currencyDef.symbol}0.${'0'.repeat(currencyDef.decimals)}`
+      : `0.${'0'.repeat(currencyDef.decimals)}${currencyDef.symbol}`;
   }
 
-  const parts = Math.abs(numAmount).toFixed(decimalPlaces).split('.');
-  const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSeparator);
-  const formatted = decimalPlaces > 0 
-    ? `${integerPart}${decimalSeparator}${parts[1]}`
+  const parts = Math.abs(numAmount).toFixed(currencyDef.decimals).split('.');
+  const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const formatted = currencyDef.decimals > 0 
+    ? `${integerPart}.${parts[1]}`
     : integerPart;
 
   const signedFormatted = numAmount < 0 ? `-${formatted}` : formatted;
 
-  if (position === 'before') {
-    return `${symbol}${signedFormatted}`;
+  if (currencyDef.position === 'before') {
+    return `${currencyDef.symbol}${signedFormatted}`;
   } else {
-    return `${signedFormatted}${symbol}`;
+    return `${signedFormatted}${currencyDef.symbol}`;
   }
 };
 
