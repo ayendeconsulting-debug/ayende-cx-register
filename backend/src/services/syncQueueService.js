@@ -6,6 +6,7 @@
  */
 
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Add item to sync queue
@@ -48,7 +49,8 @@ export const addToQueue = async ({
     // Create queue item
     const queueItem = await prisma.syncQueue.create({
       data: {
-        businessId,
+        id: uuidv4(),
+      businessId,
         entityType,
         entityId,
         operation,

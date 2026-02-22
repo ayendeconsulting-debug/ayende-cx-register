@@ -330,7 +330,8 @@ export const importProducts = asyncHandler(async (req, res) => {
       if (product.stockQuantity > 0) {
         await prisma.stockMovement.create({
           data: {
-            productId: product.id,
+            id: uuidv4(),
+          productId: product.id,
             movementType: 'PURCHASE',
             quantity: product.stockQuantity,
             previousStock: 0,
