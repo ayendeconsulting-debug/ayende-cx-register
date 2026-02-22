@@ -154,7 +154,7 @@ export const login = asyncHandler(async (req, res) => {
       isActive: true
     },
     include: {
-      business: true
+      Business: true
     }
   });
 
@@ -171,7 +171,7 @@ export const login = asyncHandler(async (req, res) => {
     return errorResponse(res, 'Invalid credentials', 401);
   }
 
-  console.log('[LOGIN SUCCESS]', `${user.username} logged into ${user.business.businessName}`);
+  console.log('[LOGIN SUCCESS]', `${user.username} logged into ${user.Business.businessName}`);
 
   // Update last login
   await prisma.user.update({
@@ -208,27 +208,27 @@ export const login = asyncHandler(async (req, res) => {
       businessId: user.businessId,
     },
     business: {
-      id: user.business.id,
-      name: user.business.businessName,
-      subdomain: user.business.subdomain,
+      id: user.Business.id,
+      name: user.Business.businessName,
+      subdomain: user.Business.subdomain,
       // Currency settings
-      currency: user.business.currency,
-      currencyCode: user.business.currencyCode,
-      currencyPosition: user.business.currencyPosition || 'before',
-      decimalSeparator: user.business.decimalSeparator || '.',
-      thousandsSeparator: user.business.thousandsSeparator || ',',
-      decimalPlaces: user.business.decimalPlaces ?? 2,
+      currency: user.Business.currency,
+      currencyCode: user.Business.currencyCode,
+      currencyPosition: user.Business.currencyPosition || 'before',
+      decimalSeparator: user.Business.decimalSeparator || '.',
+      thousandsSeparator: user.Business.thousandsSeparator || ',',
+      decimalPlaces: user.Business.decimalPlaces ?? 2,
       // Tax settings
-      taxRate: user.business.taxRate,
-      taxLabel: user.business.taxLabel,
-      taxEnabled: user.business.taxEnabled,
+      taxRate: user.Business.taxRate,
+      taxLabel: user.Business.taxLabel,
+      taxEnabled: user.Business.taxEnabled,
       // Theme settings
-      primaryColor: user.business.primaryColor,
-      secondaryColor: user.business.secondaryColor,
-      logoUrl: user.business.logoUrl,
+      primaryColor: user.Business.primaryColor,
+      secondaryColor: user.Business.secondaryColor,
+      logoUrl: user.Business.logoUrl,
       // Feature flags
-      rentalEnabled: user.business.rentalEnabled,
-      loyaltyEnabled: user.business.loyaltyEnabled,
+      rentalEnabled: user.Business.rentalEnabled,
+      loyaltyEnabled: user.Business.loyaltyEnabled,
     },
     accessToken,
     refreshToken,
@@ -254,7 +254,7 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
     include: {
-      business: true
+      Business: true
     }
   });
 
@@ -275,23 +275,23 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
     refreshToken: newRefreshToken,
     // Include updated business settings on token refresh
     business: {
-      id: user.business.id,
-      name: user.business.businessName,
-      subdomain: user.business.subdomain,
-      currency: user.business.currency,
-      currencyCode: user.business.currencyCode,
-      currencyPosition: user.business.currencyPosition || 'before',
-      decimalSeparator: user.business.decimalSeparator || '.',
-      thousandsSeparator: user.business.thousandsSeparator || ',',
-      decimalPlaces: user.business.decimalPlaces ?? 2,
-      taxRate: user.business.taxRate,
-      taxLabel: user.business.taxLabel,
-      taxEnabled: user.business.taxEnabled,
-      primaryColor: user.business.primaryColor,
-      secondaryColor: user.business.secondaryColor,
-      logoUrl: user.business.logoUrl,
-      rentalEnabled: user.business.rentalEnabled,
-      loyaltyEnabled: user.business.loyaltyEnabled,
+      id: user.Business.id,
+      name: user.Business.businessName,
+      subdomain: user.Business.subdomain,
+      currency: user.Business.currency,
+      currencyCode: user.Business.currencyCode,
+      currencyPosition: user.Business.currencyPosition || 'before',
+      decimalSeparator: user.Business.decimalSeparator || '.',
+      thousandsSeparator: user.Business.thousandsSeparator || ',',
+      decimalPlaces: user.Business.decimalPlaces ?? 2,
+      taxRate: user.Business.taxRate,
+      taxLabel: user.Business.taxLabel,
+      taxEnabled: user.Business.taxEnabled,
+      primaryColor: user.Business.primaryColor,
+      secondaryColor: user.Business.secondaryColor,
+      logoUrl: user.Business.logoUrl,
+      rentalEnabled: user.Business.rentalEnabled,
+      loyaltyEnabled: user.Business.loyaltyEnabled,
     },
   }, 'Token refreshed successfully');
 });
@@ -397,7 +397,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   const user = await prisma.user.findFirst({
     where: whereClause,
     include: {
-      business: true
+      Business: true
     }
   });
 
@@ -436,7 +436,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      businessName: user.business.businessName,
+      businessName: user.Business.businessName,
       resetUrl,
       expiresIn: '1 hour',
     });
