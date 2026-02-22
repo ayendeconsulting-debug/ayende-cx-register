@@ -189,7 +189,7 @@ export const login = asyncHandler(async (req, res) => {
 
   // Create audit log
   await prisma.auditLog.create({
-    data: {
+    data: {`n      id: crypto.randomUUID(),
       userId: user.id,
       action: 'LOGIN',
       entityType: 'User',
@@ -351,7 +351,7 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
 export const logout = asyncHandler(async (req, res) => {
   // Create audit log
   await prisma.auditLog.create({
-    data: {
+    data: {`n      id: crypto.randomUUID(),
       userId: req.user.id,
       action: 'LOGOUT',
       entityType: 'User',
@@ -508,7 +508,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
   // Create audit log
   await prisma.auditLog.create({
-    data: {
+    data: {`n      id: crypto.randomUUID(),
       userId: user.id,
       action: 'UPDATE',
       entityType: 'User',
@@ -561,7 +561,7 @@ export const changePassword = asyncHandler(async (req, res) => {
 
   // Create audit log
   await prisma.auditLog.create({
-    data: {
+    data: {`n      id: crypto.randomUUID(),
       userId: user.id,
       action: 'UPDATE',
       entityType: 'User',
