@@ -21,7 +21,7 @@ export const getAllCategories = async (businessId, includeInactive = false) => {
     orderBy: { sortOrder: 'asc' },
     include: {
       _count: {
-        select: { Products: true },
+        select: { Product: true },
       },
     },
   });
@@ -51,7 +51,7 @@ export const getCategoryById = async (businessId, id) => {
         },
       },
       _count: {
-        select: { Products: true },
+        select: { Product: true },
       },
     },
   });
@@ -176,7 +176,7 @@ export const deleteCategory = async (businessId, id, userId) => {
     },
     include: {
       _count: {
-        select: { Products: true },
+        select: { Product: true },
       },
     },
   });

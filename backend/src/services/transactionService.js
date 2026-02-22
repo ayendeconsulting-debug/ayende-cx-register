@@ -136,7 +136,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
       status: transactionData.status || 'COMPLETED',
       ...(transactionData.shiftId && { shift: { connect: { id: transactionData.shiftId } } }),
       notes: transactionData.notes || null,
-      items: {
+      TransactionItem: {
         create: enrichedItems,
       },
     };
@@ -144,7 +144,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
     const newTransaction = await tx.transaction.create({
       data: transactionCreateData,
       include: {
-        items: {
+        TransactionItem: {
           include: {
             product: true,
           },
@@ -318,7 +318,7 @@ export const getAllTransactions = async (businessId, filters = {}) => {
             isAnonymous: true,
           },
         },
-        items: {
+        TransactionItem: {
           include: {
             product: {
               select: {
@@ -354,7 +354,7 @@ export const getTransactionById = async (businessId, id) => {
     },
     include: {
       customer: true,
-      items: {
+      TransactionItem: {
         include: {
           product: true,
         },
