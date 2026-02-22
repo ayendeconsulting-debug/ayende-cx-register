@@ -1,5 +1,5 @@
-import prisma from '../config/database.js';
-import { AppError } from '../middleware/errorHandler.js';
+import prisma from "../config/database.js";
+import { AppError } from "../middleware/errorHandler.js";
 
 /**
  * Shift Service - Business logic for shift management
@@ -12,8 +12,8 @@ import { AppError } from '../middleware/errorHandler.js';
  */
 const generateShiftNumber = async (businessId) => {
   const today = new Date();
-  const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
-  
+  const dateStr = today.toISOString().split("T")[0].replace(/-/g, "");
+
   const lastShift = await prisma.shift.findFirst({
     where: {
       businessId,
@@ -22,35 +22,43 @@ const generateShiftNumber = async (businessId) => {
       },
     },
     orderBy: {
-      shiftNumber: 'desc',
+      shiftNumber: "desc",
     },
   });
-  
+
   let sequence = 1;
   if (lastShift) {
-    const lastSequence = parseInt(lastShift.shiftNumber.split('-')[2]);
+    const lastSequence = parseInt(lastShift.shiftNumber.split("-")[2]);
     sequence = lastSequence + 1;
   }
-  
-  const sequenceStr = String(sequence).padStart(3, '0');
+
+  const sequenceStr = String(sequence).padStart(3, "0");
   return `SHIFT-${dateStr}-${sequenceStr}`;
 };
 
 /**
  * Open a new shift
  */
-export const openShift = async (businessId, userId, openingCash, notes = null) => {
+export const openShift = async (
+  businessId,
+  userId,
+  openingCash,
+  notes = null,
+) => {
   // Check if user already has an open shift
   const existingOpenShift = await prisma.shift.findFirst({
     where: {
       businessId,
       userId,
-      status: 'OPEN',
+      status: "OPEN",
     },
   });
 
   if (existingOpenShift) {
-    throw new AppError('You already have an open shift. Please close it before opening a new one.', 400);
+    throw new AppError(
+      "You already have an open shift. Please close it before opening a new one.",
+      400,
+    );
   }
 
   // Generate shift number
@@ -63,11 +71,11 @@ export const openShift = async (businessId, userId, openingCash, notes = null) =
       userId,
       shiftNumber,
       openingCash: parseFloat(openingCash),
-      status: 'OPEN',
+      status: "OPEN",
       notes,
     },
     include: {
-      user: {
+      User: {
         select: {
           id: true,
           firstName: true,
@@ -84,17 +92,23 @@ export const openShift = async (businessId, userId, openingCash, notes = null) =
 /**
  * Close a shift
  */
-export const closeShift = async (businessId, shiftId, closingCash, notes = null, userId) => {
+export const closeShift = async (
+  businessId,
+  shiftId,
+  closingCash,
+  notes = null,
+  userId,
+) => {
   // Get shift
   const shift = await prisma.shift.findFirst({
-    where: { 
+    where: {
       id: shiftId,
-      businessId
+      businessId,
     },
     include: {
-      transactions: {
+      Transactions: {
         where: {
-          status: 'COMPLETED',
+          status: "COMPLETED",
         },
       },
       user: {
@@ -109,34 +123,34 @@ export const closeShift = async (businessId, shiftId, closingCash, notes = null,
   });
 
   if (!shift) {
-    throw new AppError('Shift not found', 404);
+    throw new AppError("Shift not found", 404);
   }
 
-  if (shift.status === 'CLOSED') {
-    throw new AppError('Shift is already closed', 400);
+  if (shift.status === "CLOSED") {
+    throw new AppError("Shift is already closed", 400);
   }
 
   // Only the shift owner or admin can close
   if (shift.userId !== userId) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      throw new AppError('You can only close your own shifts', 403);
+    if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") {
+      throw new AppError("You can only close your own shifts", 403);
     }
   }
 
   // Calculate expected cash
   const cashTransactions = shift.transactions.filter(
-    (t) => t.paymentMethod === 'CASH'
+    (t) => t.paymentMethod === "CASH",
   );
 
   const cashSales = cashTransactions.reduce(
     (sum, t) => sum + parseFloat(t.amountPaid),
-    0
+    0,
   );
 
   const cashReturns = cashTransactions.reduce(
     (sum, t) => sum + parseFloat(t.changeGiven),
-    0
+    0,
   );
 
   const expectedCash = parseFloat(shift.openingCash) + cashSales - cashReturns;
@@ -147,7 +161,7 @@ export const closeShift = async (businessId, shiftId, closingCash, notes = null,
   const updatedShift = await prisma.shift.update({
     where: { id: shiftId },
     data: {
-      status: 'CLOSED',
+      status: "CLOSED",
       closingCash: actualClosingCash,
       expectedCash,
       variance,
@@ -155,7 +169,7 @@ export const closeShift = async (businessId, shiftId, closingCash, notes = null,
       notes: notes || shift.notes,
     },
     include: {
-      user: {
+      User: {
         select: {
           id: true,
           firstName: true,
@@ -163,9 +177,9 @@ export const closeShift = async (businessId, shiftId, closingCash, notes = null,
           username: true,
         },
       },
-      transactions: {
+      Transactions: {
         where: {
-          status: 'COMPLETED',
+          status: "COMPLETED",
         },
         include: {
           customer: {
@@ -195,8 +209,8 @@ export const getAllShifts = async (businessId, filters = {}) => {
     status,
     startDate,
     endDate,
-    sortBy = 'openedAt',
-    sortOrder = 'desc',
+    sortBy = "openedAt",
+    sortOrder = "desc",
   } = filters;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -230,7 +244,7 @@ export const getAllShifts = async (businessId, filters = {}) => {
         [sortBy]: sortOrder,
       },
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             firstName: true,
@@ -240,7 +254,7 @@ export const getAllShifts = async (businessId, filters = {}) => {
         },
         _count: {
           select: {
-            transactions: true,
+            Transactions: true,
           },
         },
       },
@@ -262,12 +276,12 @@ export const getAllShifts = async (businessId, filters = {}) => {
  */
 export const getShiftById = async (businessId, shiftId) => {
   const shift = await prisma.shift.findFirst({
-    where: { 
+    where: {
       id: shiftId,
-      businessId
+      businessId,
     },
     include: {
-      user: {
+      User: {
         select: {
           id: true,
           firstName: true,
@@ -275,9 +289,9 @@ export const getShiftById = async (businessId, shiftId) => {
           username: true,
         },
       },
-      transactions: {
+      Transactions: {
         where: {
-          status: 'COMPLETED',
+          status: "COMPLETED",
         },
         include: {
           customer: {
@@ -294,7 +308,7 @@ export const getShiftById = async (businessId, shiftId) => {
   });
 
   if (!shift) {
-    throw new AppError('Shift not found', 404);
+    throw new AppError("Shift not found", 404);
   }
 
   return shift;
@@ -308,10 +322,10 @@ export const getCurrentShift = async (businessId, userId) => {
     where: {
       businessId,
       userId,
-      status: 'OPEN',
+      status: "OPEN",
     },
     include: {
-      user: {
+      User: {
         select: {
           id: true,
           firstName: true,
@@ -321,7 +335,7 @@ export const getCurrentShift = async (businessId, userId) => {
       },
       _count: {
         select: {
-          transactions: true,
+          Transactions: true,
         },
       },
     },
@@ -335,12 +349,12 @@ export const getCurrentShift = async (businessId, userId) => {
  */
 export const getShiftReport = async (businessId, shiftId) => {
   const shift = await prisma.shift.findFirst({
-    where: { 
+    where: {
       id: shiftId,
-      businessId
+      businessId,
     },
     include: {
-      user: {
+      User: {
         select: {
           id: true,
           firstName: true,
@@ -348,9 +362,9 @@ export const getShiftReport = async (businessId, shiftId) => {
           username: true,
         },
       },
-      transactions: {
+      Transactions: {
         where: {
-          status: 'COMPLETED',
+          status: "COMPLETED",
         },
         include: {
           customer: {
@@ -365,7 +379,7 @@ export const getShiftReport = async (businessId, shiftId) => {
               product: {
                 select: {
                   name: true,
-                  category: {
+                  Category: {
                     select: {
                       name: true,
                     },
@@ -380,7 +394,7 @@ export const getShiftReport = async (businessId, shiftId) => {
   });
 
   if (!shift) {
-    throw new AppError('Shift not found', 404);
+    throw new AppError("Shift not found", 404);
   }
 
   // Calculate totals by payment method
@@ -400,18 +414,19 @@ export const getShiftReport = async (businessId, shiftId) => {
   // Calculate totals
   const totalSales = shift.transactions.reduce(
     (sum, t) => sum + parseFloat(t.total),
-    0
+    0,
   );
   const totalTransactions = shift.transactions.length;
-  const averageTransaction = totalTransactions > 0 ? totalSales / totalTransactions : 0;
+  const averageTransaction =
+    totalTransactions > 0 ? totalSales / totalTransactions : 0;
 
   const totalTax = shift.transactions.reduce(
     (sum, t) => sum + parseFloat(t.taxAmount),
-    0
+    0,
   );
   const totalDiscount = shift.transactions.reduce(
     (sum, t) => sum + parseFloat(t.discountAmount),
-    0
+    0,
   );
 
   // Calculate items sold
@@ -441,14 +456,16 @@ export const getShiftReport = async (businessId, shiftId) => {
     .slice(0, 10);
 
   // Cash reconciliation
-  const cashTransactions = shift.transactions.filter((t) => t.paymentMethod === 'CASH');
+  const cashTransactions = shift.transactions.filter(
+    (t) => t.paymentMethod === "CASH",
+  );
   const cashSales = cashTransactions.reduce(
     (sum, t) => sum + parseFloat(t.amountPaid),
-    0
+    0,
   );
   const cashReturns = cashTransactions.reduce(
     (sum, t) => sum + parseFloat(t.changeGiven),
-    0
+    0,
   );
   const expectedCash = parseFloat(shift.openingCash) + cashSales - cashReturns;
 
@@ -461,7 +478,9 @@ export const getShiftReport = async (businessId, shiftId) => {
       closedAt: shift.closedAt,
       openingCash: parseFloat(shift.openingCash),
       closingCash: shift.closingCash ? parseFloat(shift.closingCash) : null,
-      expectedCash: shift.expectedCash ? parseFloat(shift.expectedCash) : expectedCash,
+      expectedCash: shift.expectedCash
+        ? parseFloat(shift.expectedCash)
+        : expectedCash,
       variance: shift.variance ? parseFloat(shift.variance) : null,
       notes: shift.notes,
       user: shift.user,
@@ -474,11 +493,13 @@ export const getShiftReport = async (businessId, shiftId) => {
       totalDiscount: parseFloat(totalDiscount.toFixed(2)),
       itemsSold,
     },
-    paymentMethods: Object.entries(paymentMethodTotals).map(([method, data]) => ({
-      method,
-      count: data.count,
-      total: parseFloat(data.total.toFixed(2)),
-    })),
+    paymentMethods: Object.entries(paymentMethodTotals).map(
+      ([method, data]) => ({
+        method,
+        count: data.count,
+        total: parseFloat(data.total.toFixed(2)),
+      }),
+    ),
     cashReconciliation: {
       openingCash: parseFloat(shift.openingCash),
       cashSales: parseFloat(cashSales.toFixed(2)),
@@ -488,6 +509,6 @@ export const getShiftReport = async (businessId, shiftId) => {
       variance: shift.variance ? parseFloat(shift.variance) : null,
     },
     topProducts,
-    transactions: shift.transactions,
+    Transactions: shift.transactions,
   };
 };

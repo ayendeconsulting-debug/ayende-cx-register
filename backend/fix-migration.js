@@ -1,28 +1,69 @@
-﻿import { PrismaClient } from '@prisma/client';
-import { execSync } from 'child_process';
+// Fix failed Prisma migration by marking it as complete
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-async function resetMigrations() {
+async function fixMigration() {
   try {
-    console.log('Connecting to database...');
+    console.log('🔍 Checking migration status...');
     
-    console.log('Deleting failed migration record...');
-    const result = await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE migration_name = '20260101161452_multi_business_type_architecture'`;
+    // Check current migrations
+    const migrations = await prisma.$queryRaw`
+      SELECT migration_name, finished_at, started_at 
+      FROM _prisma_migrations 
+      ORDER BY started_at DESC
+    `;
     
-    console.log(`Deleted ${result} migration record(s)`);
+    console.log('Current migrations:', migrations);
     
-    await prisma.$disconnect();
+    // Insert the baseline migration record
+    console.log('\n📝 Marking migration as complete...');
     
-    console.log('Running migrations...');
-    execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+    const result = await prisma.$executeRaw`
+      INSERT INTO _prisma_migrations (
+        id,
+        checksum,
+        finished_at,
+        migration_name,
+        logs,
+        rolled_back_at,
+        started_at,
+        applied_steps_count
+      ) VALUES (
+        '20260101132941-initial-v2-schema',
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        NOW(),
+        '20260101132941_initial_v2_schema',
+        'Baseline migration - schema already exists in database',
+        NULL,
+        NOW(),
+        1
+      )
+      ON CONFLICT (migration_name) 
+      DO UPDATE SET 
+        finished_at = NOW(), 
+        applied_steps_count = 1,
+        logs = 'Baseline migration - schema already exists in database'
+    `;
     
-    console.log('Success! Migrations completed.');
+    console.log('✅ Migration record inserted/updated:', result);
+    
+    // Verify
+    const updated = await prisma.$queryRaw`
+      SELECT migration_name, finished_at, applied_steps_count 
+      FROM _prisma_migrations 
+      WHERE migration_name = '20260101132941_initial_v2_schema'
+    `;
+    
+    console.log('\n✅ Verification:', updated);
+    console.log('\n🎉 Migration fix complete! The deployment should now succeed.');
+    
   } catch (error) {
-    console.error('Error:', error);
-    await prisma.$disconnect();
+    console.error('❌ Error fixing migration:', error);
     process.exit(1);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-resetMigrations();
+fixMigration();

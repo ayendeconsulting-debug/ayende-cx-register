@@ -55,7 +55,7 @@ export const getAllProducts = async (businessId, filters = {}) => {
       take: parseInt(limit),
       orderBy: { [sortBy]: sortOrder },
       include: {
-        category: {
+        Category: {
           select: {
             id: true,
             name: true,

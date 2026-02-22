@@ -108,7 +108,7 @@ export const inviteUser = asyncHandler(async (req, res) => {
           businessName: true,
         },
       },
-      inviter: {
+       User: {
         select: {
           firstName: true,
           lastName: true,
@@ -307,7 +307,7 @@ export const getInvitationDetails = asyncHandler(async (req, res) => {
           businessEmail: true,
         },
       },
-      inviter: {
+       User: {
         select: {
           firstName: true,
           lastName: true,
@@ -365,7 +365,7 @@ export const getInvitations = asyncHandler(async (req, res) => {
   const invitations = await prisma.userInvitation.findMany({
     where,
     include: {
-      inviter: {
+       User: {
         select: {
           firstName: true,
           lastName: true,
