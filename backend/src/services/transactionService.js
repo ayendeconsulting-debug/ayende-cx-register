@@ -118,7 +118,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
       },
       // Only connect customer if customerId exists and is not undefined
       ...(customerId && customerId !== undefined && {
-        customer: {
+        Customer: {
           connect: { id: customerId }
         }
       }),
@@ -308,7 +308,7 @@ export const getAllTransactions = async (businessId, filters = {}) => {
       take: parseInt(limit),
       orderBy: { [sortBy]: sortOrder },
       include: {
-        customer: {
+        Customer: {
           select: {
             id: true,
             firstName: true,
@@ -456,7 +456,7 @@ export const getTransactionAnalytics = async (businessId, filters = {}) => {
     prisma.transaction.count({
       where: {
         ...where,
-        customer: {
+        Customer: {
           isAnonymous: true,
         },
       },
