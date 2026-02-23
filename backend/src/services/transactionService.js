@@ -113,7 +113,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
     // CREATE TRANSACTION
     // ============================================
     const transactionCreateData = {
-      business: {
+      Business: {
         connect: { id: businessId }
       },
       // Only connect customer if customerId exists and is not undefined
@@ -149,7 +149,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
             Product: true,
           },
         },
-        customer: true,
+        Customer: true,
       },
     });
 

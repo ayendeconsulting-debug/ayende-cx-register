@@ -105,7 +105,7 @@ export const inviteUser = asyncHandler(async (req, res) => {
       updatedAt: new Date(),
     },
     include: {
-      business: {
+      Business: {
         select: {
           businessName: true,
         },
@@ -180,7 +180,7 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
       status: 'PENDING',
     },
     include: {
-      business: true,
+      Business: true,
     },
   });
 
@@ -303,7 +303,7 @@ export const getInvitationDetails = asyncHandler(async (req, res) => {
       status: 'PENDING',
     },
     include: {
-      business: {
+      Business: {
         select: {
           businessName: true,
           businessEmail: true,
