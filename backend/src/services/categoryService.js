@@ -91,7 +91,7 @@ export const createCategory = async (businessId, categoryData, userId) => {
   const category = await prisma.category.create({
     data: {
       id: uuidv4(),  // ✅ ADDED
-      updaateAt: new Date(),
+      updatedAt: new Date(),
       businessId,
       name: categoryData.name,
       description: categoryData.description || null,
