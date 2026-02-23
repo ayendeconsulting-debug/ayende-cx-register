@@ -91,7 +91,7 @@ export const createCategory = async (businessId, categoryData, userId) => {
   const category = await prisma.category.create({
     data: {
       id: uuidv4(),  // ✅ ADDED
-      createAt: new Date(),
+      updaateAt: new Date(),
       businessId,
       name: categoryData.name,
       description: categoryData.description || null,
@@ -103,8 +103,7 @@ export const createCategory = async (businessId, categoryData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
-      id: uuidv4(),  // ✅ ADDED
-      createdAt: new Date(),
+      id: uuidv4(),  // 
       userId,
       action: 'CREATE',
       entityType: 'Category',
