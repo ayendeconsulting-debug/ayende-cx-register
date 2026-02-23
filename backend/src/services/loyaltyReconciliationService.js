@@ -6,7 +6,6 @@
  */
 
 import prisma from '../config/database.js';
-import { v4 as uuidv4 } from 'uuid';
 import { fetchCustomerFromCRM } from './crmIntegrationService.js';
 import { v4 as uuidv4 } from 'uuid';
 
