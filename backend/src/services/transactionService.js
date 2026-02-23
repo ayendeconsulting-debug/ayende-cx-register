@@ -211,6 +211,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
     // Create audit log
     await tx.auditLog.create({
       data: {
+        id: uuidv4(),
         userId,
         action: 'CREATE',
         entityType: 'Transaction',
