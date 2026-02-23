@@ -86,7 +86,7 @@ export const getProductById = async (businessId, id) => {
       businessId
     },
     include: {
-      category: true,
+      Category: true,
       stockMovements: {
         orderBy: { createdAt: 'desc' },
         take: 10,
@@ -111,7 +111,7 @@ export const getProductBySku = async (businessId, sku) => {
       businessId
     },
     include: {
-      category: true,
+      Category: true,
     },
   });
 
@@ -132,7 +132,7 @@ export const getProductByBarcode = async (businessId, barcode) => {
       businessId
     },
     include: {
-      category: true,
+      Category: true,
     },
   });
 
@@ -202,7 +202,7 @@ export const createProduct = async (businessId, productData, userId) => {
       loyaltyPoints: parseInt(productData.loyaltyPoints) || 0,
     },
     include: {
-      category: true,
+      Category: true,
     },
   });
 
@@ -316,7 +316,7 @@ export const updateProduct = async (businessId, id, productData, userId) => {
     where: { id },
     data: updateData,
     include: {
-      category: true,
+      Category: true,
     },
   });
 
