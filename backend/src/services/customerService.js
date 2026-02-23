@@ -4,12 +4,14 @@
  * MULTI-TENANT VERSION - All operations filtered by businessId
  * 
  * UPDATED: Added createFromWebhook() for CRM → POS customer creation
+ * UPDATED: Added UUID generation for customer creation
  */
 
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { syncCustomerToCRM, fetchCustomerFromCRM } from './crmIntegrationService.js';
 import * as syncQueueService from './syncQueueService.js';
+import { v4 as uuidv4 } from 'uuid';  // ✅ ADDED: UUID generation
 
 /**
  * Create customer with CRM duplicate check
@@ -55,6 +57,7 @@ export const createCustomer = async (businessId, customerData) => {
     // Create customer
     const customer = await prisma.customer.create({
       data: {
+        id: uuidv4(),  // ✅ ADDED: Generate UUID
         businessId,
         firstName: customerData.firstName,
         lastName: customerData.lastName,
@@ -204,6 +207,7 @@ export const createFromWebhook = async (customerData) => {
     // Create customer in POS
     const customer = await prisma.customer.create({
       data: {
+        id: uuidv4(),  // ✅ ADDED: Generate UUID
         businessId,
         externalId,              // Store CRM customer ID
         firstName,

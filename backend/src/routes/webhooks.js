@@ -6,15 +6,18 @@
  * 
  * Endpoints:
  * - POST /api/v1/webhooks/customer - Receive customer updates/creates from CRM
+ * - POST /api/v1/webhooks/provisioning-complete - Receive provisioning completion from CRM
  * - GET /api/v1/webhooks/health - Health check endpoint
  * 
  * UPDATED: Added support for customer creation (operation='created')
+ * UPDATED: Added provisioning-complete webhook for CRM tenant linking
  */
 
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { createFromWebhook } from '../services/customerService.js';
+import { handleProvisioningComplete } from '../controllers/provisioningWebhookController.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -65,6 +68,38 @@ const verifyWebhookToken = (req, res, next) => {
     return res.status(401).json({
       success: false,
       error: 'Invalid token'
+    });
+  }
+};
+
+/**
+ * Middleware to verify webhook secret (for provisioning webhook)
+ */
+const verifyWebhookSecret = (req, res, next) => {
+  try {
+    const webhookSecret = req.headers['x-webhook-secret'];
+    
+    if (!webhookSecret) {
+      return res.status(401).json({
+        success: false,
+        error: 'Missing X-Webhook-Secret header'
+      });
+    }
+
+    if (webhookSecret !== INTEGRATION_SECRET) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid webhook secret'
+      });
+    }
+
+    next();
+
+  } catch (error) {
+    console.error('[WEBHOOK] Secret verification failed:', error.message);
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid webhook secret'
     });
   }
 };
@@ -154,6 +189,20 @@ router.post('/customer', verifyWebhookToken, async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /api/v1/webhooks/provisioning-complete
+ * Receive notification that CRM provisioning is complete
+ * Links POS business to CRM tenant UUID
+ * 
+ * Expected payload:
+ * {
+ *   "business_id": "pos-business-uuid",
+ *   "crm_tenant_id": "crm-tenant-uuid",
+ *   "subdomain": "businessname"
+ * }
+ */
+router.post('/provisioning-complete', verifyWebhookSecret, handleProvisioningComplete);
 
 /**
  * Handle customer creation from CRM
