@@ -353,7 +353,7 @@ export const getTransactionById = async (businessId, id) => {
       businessId
     },
     include: {
-      customer: true,
+      Customer: true,
       TransactionItem: {
         include: {
           Product: true,
