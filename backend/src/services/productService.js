@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
-import { AppError } from '../middleware/errorHandler.js';
 import { v4 as uuidv4 } from 'uuid';
+import { AppError } from '../middleware/errorHandler.js';
 
 /**
  * Product Service - Business logic for product operations
@@ -191,6 +191,7 @@ export const createProduct = async (businessId, productData, userId) => {
   // Create product
   const product = await prisma.product.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       businessId,
       ...productData,
       barcode: barcode, // FIXED: Use normalized barcode (null if empty)
@@ -209,6 +210,7 @@ export const createProduct = async (businessId, productData, userId) => {
   if (product.stockQuantity > 0) {
     await prisma.stockMovement.create({
       data: {
+        id: uuidv4(),  // ✅ ADDED
         productId: product.id,
         movementType: 'PURCHASE',
         quantity: product.stockQuantity,
@@ -223,6 +225,7 @@ export const createProduct = async (businessId, productData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'CREATE',
       entityType: 'Product',
@@ -320,6 +323,7 @@ export const updateProduct = async (businessId, id, productData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'UPDATE',
       entityType: 'Product',
@@ -358,6 +362,7 @@ export const deleteProduct = async (businessId, id, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'DELETE',
       entityType: 'Product',
@@ -420,6 +425,7 @@ export const adjustStock = async (businessId, id, adjustmentData, userId) => {
     }),
     prisma.stockMovement.create({
       data: {
+        id: uuidv4(),  // ✅ ADDED
         productId: id,
         movementType,
         quantity: parseInt(quantity),
@@ -434,6 +440,7 @@ export const adjustStock = async (businessId, id, adjustmentData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'UPDATE',
       entityType: 'Product',
