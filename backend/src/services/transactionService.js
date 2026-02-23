@@ -134,7 +134,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
       loyaltyPointsEarned: transactionData.loyaltyPointsEarned || 0,
       loyaltyPointsRedeemed: transactionData.loyaltyPointsRedeemed || 0,
       status: transactionData.status || 'COMPLETED',
-      ...(transactionData.shiftId && { shift: { connect: { id: transactionData.shiftId } } }),
+      ...(transactionData.shiftId && { Shift: { connect: { id: transactionData.shiftId } } }),
       notes: transactionData.notes || null,
       TransactionItem: {
         create: enrichedItems,
