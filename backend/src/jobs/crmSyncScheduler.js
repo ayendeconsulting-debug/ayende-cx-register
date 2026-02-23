@@ -14,9 +14,7 @@
  */
 
 import cron from 'node-cron';
-import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 
