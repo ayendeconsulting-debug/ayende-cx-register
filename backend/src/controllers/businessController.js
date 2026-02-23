@@ -3,6 +3,7 @@ import { hashPassword } from '../utils/auth.js';
 import { successResponse, errorResponse, createdResponse } from '../utils/response.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { sendBusinessRegistrationNotification } from '../utils/email.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * @route   GET /api/v1/businesses/check-subdomain/:subdomain
@@ -66,12 +67,12 @@ export const registerBusiness = asyncHandler(async (req, res) => {
   // Verify terms version exists and is active
   let termsVersion;
   if (termsVersionId) {
-    termsVersion = await prisma.termsVersion.findUnique({
+    termsVersion = await prisma.terms_versions.findUnique({
       where: { id: termsVersionId }
     });
   } else {
     // Get current active terms if no specific version provided
-    termsVersion = await prisma.termsVersion.findFirst({
+    termsVersion = await prisma.terms_versions.findFirst({
       where: {
         documentType: 'COMBINED',
         isActive: true
@@ -123,6 +124,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
     // Create business
     const business = await tx.business.create({
       data: {
+        id: uuidv4(),
         businessName,
         subdomain,
         businessEmail,
@@ -139,6 +141,7 @@ export const registerBusiness = asyncHandler(async (req, res) => {
     // Create owner user
     const owner = await tx.user.create({
       data: {
+        id: uuidv4(),
         businessId: business.id,
         email: ownerEmail,
         username: 'admin',
@@ -146,13 +149,15 @@ export const registerBusiness = asyncHandler(async (req, res) => {
         firstName: ownerFirstName,
         lastName: ownerLastName,
         role: 'SUPER_ADMIN',
-        isActive: true
+        isActive: true,
+        updatedAt: new Date()
       }
     });
 
     // Record terms acceptance
-    const acceptance = await tx.termsAcceptance.create({
+    const acceptance = await tx.terms_acceptances.create({
       data: {
+        id: uuidv4(),
         businessId: business.id,
         termsVersionId: termsVersion.id,
         acceptedBy: owner.id,

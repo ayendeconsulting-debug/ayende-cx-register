@@ -1,6 +1,7 @@
 import prisma from "../config/database.js";
 import { successResponse, errorResponse } from "../utils/response.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * @route   GET /api/v1/terms/current
@@ -9,7 +10,7 @@ import { asyncHandler } from "../middleware/errorHandler.js";
  */
 export const getCurrentTerms = asyncHandler(async (req, res) => {
   // Get the most recent active COMBINED terms (Terms + Privacy together)
-  const terms = await prisma.termsVersion.findFirst({
+  const terms = await prisma.terms_versions.findFirst({
     where: {
       documentType: "COMBINED",
       isActive: true,
@@ -40,7 +41,7 @@ export const getCurrentTerms = asyncHandler(async (req, res) => {
  * @access  Public
  */
 export const getAllActiveTerms = asyncHandler(async (req, res) => {
-  const terms = await prisma.termsVersion.findMany({
+  const terms = await prisma.terms_versions.findMany({
     where: {
       isActive: true,
     },
@@ -68,7 +69,7 @@ export const getAllActiveTerms = asyncHandler(async (req, res) => {
 export const getTermsById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const terms = await prisma.termsVersion.findUnique({
+  const terms = await prisma.terms_versions.findUnique({
     where: { id },
     select: {
       id: true,
@@ -103,10 +104,10 @@ export const getBusinessAcceptances = asyncHandler(async (req, res) => {
     return errorResponse(res, "Unauthorized", 403);
   }
 
-  const acceptances = await prisma.termsAcceptance.findMany({
+  const acceptances = await prisma.terms_acceptances.findMany({
     where: { businessId },
     include: {
-      termsVersion: {
+      terms_versions: {
         select: {
           version: true,
           documentType: true,
@@ -142,7 +143,7 @@ export const recordAcceptance = asyncHandler(async (req, res) => {
   const userAgent = req.headers["user-agent"];
 
   // Verify terms version exists and is active
-  const termsVersion = await prisma.termsVersion.findUnique({
+  const termsVersion = await prisma.terms_versions.findUnique({
     where: { id: termsVersionId },
   });
 
@@ -151,7 +152,7 @@ export const recordAcceptance = asyncHandler(async (req, res) => {
   }
 
   // Check if already accepted
-  const existingAcceptance = await prisma.termsAcceptance.findUnique({
+  const existingAcceptance = await prisma.terms_acceptances.findUnique({
     where: {
       businessId_termsVersionId: {
         businessId,
@@ -165,8 +166,9 @@ export const recordAcceptance = asyncHandler(async (req, res) => {
   }
 
   // Create acceptance record
-  const acceptance = await prisma.termsAcceptance.create({
+  const acceptance = await prisma.terms_acceptances.create({
     data: {
+      id: uuidv4(),
       businessId,
       termsVersionId,
       acceptedBy,
@@ -176,7 +178,7 @@ export const recordAcceptance = asyncHandler(async (req, res) => {
       userAgent,
     },
     include: {
-      termsVersion: {
+      terms_versions: {
         select: {
           version: true,
           title: true,
@@ -201,7 +203,7 @@ export const checkTermsAcceptance = asyncHandler(async (req, res) => {
   const { businessId } = req.params;
 
   // Get current active terms
-  const currentTerms = await prisma.termsVersion.findFirst({
+  const currentTerms = await prisma.terms_versions.findFirst({
     where: {
       documentType: "COMBINED",
       isActive: true,
@@ -216,7 +218,7 @@ export const checkTermsAcceptance = asyncHandler(async (req, res) => {
   }
 
   // Check if business has accepted
-  const acceptance = await prisma.termsAcceptance.findUnique({
+  const acceptance = await prisma.terms_acceptances.findUnique({
     where: {
       businessId_termsVersionId: {
         businessId,
