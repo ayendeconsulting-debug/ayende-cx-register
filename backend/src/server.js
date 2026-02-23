@@ -11,6 +11,7 @@ import {
   preventParameterPollution,
   addSecurityHeaders
 } from './middleware/securityMiddleware.js';
+import { v4 as uuidv4 } from 'uuid';
 
 // ============================================
 // CORE ROUTES
@@ -351,7 +352,7 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
       
       if (!category) {
         category = await prisma.category.create({
-          data: { businessId: business.id, name: cat.name, description: cat.description, isActive: true }
+          data: { id: uuidv4(), businessId: business.id, name: cat.name, description: cat.description, isActive: true }
         });
       }
       
@@ -362,6 +363,7 @@ app.post('/api/v1/admin/import-bash-products', async (req, res) => {
     for (const prod of products) {
     await prisma.product.create({
       data: {
+        id: uuidv4(),
         businessId: business.id,
         categoryId: createdCategories[prod.category],
         name: prod.name,

@@ -1,5 +1,7 @@
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { AppError } from '../middleware/errorHandler.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Product Service - Business logic for product operations

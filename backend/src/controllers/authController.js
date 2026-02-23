@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import {
   hashPassword,
   comparePassword,
@@ -56,6 +57,7 @@ export const register = asyncHandler(async (req, res) => {
   // Create user
   const user = await prisma.user.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       businessId,
       email,
       username,

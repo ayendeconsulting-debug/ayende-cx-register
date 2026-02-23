@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
-
+import { v4 as uuidv4 } from 'uuid';
 /**
  * Stock Adjustment Service - Business logic for stock adjustments with approval workflow
  * MULTI-TENANT VERSION - All operations filtered by businessId
@@ -115,6 +115,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
   // Create adjustment
   const adjustment = await prisma.stock_adjustments.create({
     data: {
+      id: uuidv4(),
       businessId,
       adjustmentNumber,
       productId,
@@ -156,6 +157,7 @@ export const createStockAdjustment = async (businessId, userId, adjustmentData) 
   if (needsApproval) {
     await prisma.stock_adjustment_approvals.create({
       data: {
+        id: uuidv4(),
         adjustmentId: adjustment.id,
         status: 'PENDING',
       },
@@ -194,6 +196,8 @@ const applyStockAdjustment = async (adjustmentId) => {
   // Create movement history record
   await prisma.stockMovementHistory.create({
     data: {
+      id: uuidv4(),
+      createdAt: new Date(),
       movementType: 'ADJUSTMENT',
       referenceId: adjustment.id,
       referenceType: 'STOCK_ADJUSTMENT',

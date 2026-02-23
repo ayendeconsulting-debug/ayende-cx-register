@@ -6,7 +6,9 @@
  */
 
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { fetchCustomerFromCRM } from './crmIntegrationService.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Reconciliation thresholds
@@ -65,6 +67,7 @@ export const reconcileCustomerLoyalty = async (businessId, customerId) => {
       // Log reconciliation failure
       await prisma.loyaltyReconciliation.create({
         data: {
+          id: uuidv4(),
           businessId,
           customerId,
           posPoints: posCustomer.loyaltyPoints || 0,
@@ -148,6 +151,7 @@ export const reconcileCustomerLoyalty = async (businessId, customerId) => {
     // 5. Log reconciliation
     const reconciliation = await prisma.loyaltyReconciliation.create({
       data: {
+        id: uuidv4(),
         businessId,
         customerId,
         posPoints,

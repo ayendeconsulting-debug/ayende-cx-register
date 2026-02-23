@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
 
@@ -40,12 +41,6 @@ const calculateRentalDays = (startDate, endDate) => {
 
 /**
  * Create a new rental contract
- * 
- * UPDATED: Now properly handles:
- * - depositAmount: Security deposit (collateral - fully refundable if no damage)
- * - rentalPaymentUpfront: Payment towards rental charges at checkout
- * - totalPaid: depositAmount + rentalPaymentUpfront
- * - balanceDue: subtotal + taxAmount - rentalPaymentUpfront
  */
 export const createRentalContract = async (businessId, data, userId) => {
   const {
@@ -54,7 +49,7 @@ export const createRentalContract = async (businessId, data, userId) => {
     startDate,
     expectedReturnDate,
     depositAmount,
-    rentalPaymentUpfront = 0,  // NEW: Payment towards rental at checkout
+    rentalPaymentUpfront = 0,
     contactPhone,
     contactEmail,
     deliveryAddress,
@@ -89,7 +84,6 @@ export const createRentalContract = async (businessId, data, userId) => {
       throw new Error(`Product "${product.name}" is not available for rental`);
     }
 
-    // Check stock availability
     if (product.stockQuantity < item.quantity) {
       throw new Error(`Insufficient stock for "${product.name}". Available: ${product.stockQuantity}, Requested: ${item.quantity}`);
     }
@@ -108,30 +102,22 @@ export const createRentalContract = async (businessId, data, userId) => {
     });
   }
 
-  // Get business for tax calculation
   const business = await prisma.business.findUnique({ where: { id: businessId } });
   const taxRate = business.taxEnabled ? Number(business.taxRate) : 0;
   const taxAmount = subtotal * taxRate;
   const totalDue = subtotal + taxAmount;
   
-  // UPDATED: Proper calculation
-  // depositAmount = Security deposit (collateral)
-  // rentalPaymentUpfront = Payment towards rental charges
-  // totalPaid = depositAmount + rentalPaymentUpfront (total collected at checkout)
-  // balanceDue = rental charges not yet paid
   const deposit = Number(depositAmount) || 0;
   const rentalPayment = Number(rentalPaymentUpfront) || 0;
   const totalPaid = deposit + rentalPayment;
-  const balanceDue = totalDue - rentalPayment;  // Only rental payment reduces balance, not deposit
+  const balanceDue = totalDue - rentalPayment;
 
-  // Generate contract number
   const contractNumber = await generateContractNumber(businessId);
 
-  // Create contract with items in a transaction
   const contract = await prisma.$transaction(async (tx) => {
-    // Create the rental contract
     const newContract = await tx.rentalContract.create({
       data: {
+        id: uuidv4(),
         contractNumber,
         businessId,
         customerId,
@@ -142,7 +128,7 @@ export const createRentalContract = async (businessId, data, userId) => {
         subtotal,
         taxAmount,
         depositAmount: deposit,
-        rentalPaymentUpfront: rentalPayment,  // NEW field
+        rentalPaymentUpfront: rentalPayment,
         totalDue,
         totalPaid,
         balanceDue,
@@ -153,7 +139,10 @@ export const createRentalContract = async (businessId, data, userId) => {
         contactEmail,
         deliveryAddress,
         rental_contract_items: {
-          create: validatedItems
+          create: validatedItems.map(item => ({
+            id: uuidv4(),
+            ...item
+          }))
         }
       },
       include: {
@@ -164,7 +153,6 @@ export const createRentalContract = async (businessId, data, userId) => {
       }
     });
 
-    // Reduce stock for each rented item
     for (const item of validatedItems) {
       const product = await tx.product.findUnique({ where: { id: item.productId } });
       
@@ -173,9 +161,9 @@ export const createRentalContract = async (businessId, data, userId) => {
         data: { stockQuantity: { decrement: item.quantity } }
       });
 
-      // Create stock movement record
       await tx.stockMovement.create({
         data: {
+          id: uuidv4(),
           productId: item.productId,
           quantity: -item.quantity,
           previousStock: product.stockQuantity,
@@ -187,9 +175,9 @@ export const createRentalContract = async (businessId, data, userId) => {
       });
     }
 
-    // Create audit log
     await tx.auditLog.create({
       data: {
+        id: uuidv4(),
         userId,
         action: 'RENTAL_CREATE',
         entityType: 'RentalContract',
@@ -237,7 +225,6 @@ export const getAllRentalContracts = async (businessId, filters = {}) => {
   const where = { businessId };
 
   if (status) {
-    // Handle multiple statuses
     if (status.includes(',')) {
       where.status = { in: status.split(',') };
     } else {
@@ -357,7 +344,6 @@ export const getOverdueRentals = async (businessId) => {
     orderBy: { expectedReturnDate: 'asc' }
   });
 
-  // Calculate overdue days and penalties for each contract
   return overdueContracts.map(contract => {
     const overdueDays = Math.ceil((now - new Date(contract.expectedReturnDate)) / (1000 * 60 * 60 * 24));
     
@@ -377,13 +363,7 @@ export const getOverdueRentals = async (businessId) => {
 };
 
 /**
- * Process rental return - FIXED with correct deposit/payment handling
- * 
- * Key Logic:
- * - Deposit is COLLATERAL (fully refundable if no damage)
- * - Rental charges are deducted from deposit OR paid separately
- * - Early return: recalculate rental based on actual days
- * - Customer refund = Deposit - Actual Rental Charges - Damage Charges + Any Overpayment
+ * Process rental return
  */
 export const processRentalReturn = async (businessId, contractId, returnData, userId) => {
   const {
@@ -417,25 +397,21 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
   const startDate = new Date(contract.startDate);
   const expectedReturnDate = new Date(contract.expectedReturnDate);
   
-  // Calculate actual days used
   const actualDaysUsed = Math.max(1, Math.ceil((now - startDate) / (1000 * 60 * 60 * 24)));
   const originalDays = Math.max(1, Math.ceil((expectedReturnDate - startDate) / (1000 * 60 * 60 * 24)));
   
-  // Determine if this is an early return
   const isEarlyReturn = now < expectedReturnDate;
   const isOverdue = now > expectedReturnDate;
   const overdueDays = isOverdue
     ? Math.ceil((now - expectedReturnDate) / (1000 * 60 * 60 * 24))
     : 0;
 
-  // Process return in transaction
   const updatedContract = await prisma.$transaction(async (tx) => {
     let totalDamageCharges = 0;
     let allItemsReturned = true;
     let recalculatedSubtotal = 0;
     let originalSubtotal = Number(contract.subtotal);
 
-    // Process each returned item
     for (const returnItem of items) {
       const contractItem = contract.items.find(i => i.id === returnItem.itemId);
       if (!contractItem) continue;
@@ -447,18 +423,13 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
 
       totalDamageCharges += damageCharge;
 
-      // Calculate this item's contribution to recalculated total
-      // Only recalculate if early return and full quantity being returned
       if (isEarlyReturn && recalculateForEarlyReturn && returnedQty >= contractItem.quantity) {
-        // Recalculate based on actual days used
         const itemRecalculated = Number(contractItem.dailyRate) * contractItem.quantity * actualDaysUsed;
         recalculatedSubtotal += itemRecalculated;
       } else {
-        // Use original subtotal for this item
         recalculatedSubtotal += Number(contractItem.subtotal);
       }
 
-      // Update contract item
       await tx.rentalContractItem.update({
         where: { id: contractItem.id },
         data: {
@@ -471,7 +442,6 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
         }
       });
 
-      // Restore stock (only good items, not damaged or missing)
       const restoreQty = returnedQty - damagedQty - missingQty;
       if (restoreQty > 0) {
         const product = await tx.product.findUnique({ where: { id: contractItem.productId } });
@@ -481,9 +451,9 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
           data: { stockQuantity: { increment: restoreQty } }
         });
 
-        // Create stock movement record
         await tx.stockMovement.create({
           data: {
+            id: uuidv4(),
             productId: contractItem.productId,
             quantity: restoreQty,
             previousStock: product.stockQuantity,
@@ -495,14 +465,12 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
         });
       }
 
-      // Check if all items returned
       const updatedItem = await tx.rentalContractItem.findUnique({ where: { id: contractItem.id } });
       if (updatedItem.returnedQuantity < contractItem.quantity) {
         allItemsReturned = false;
       }
     }
 
-    // Calculate penalty if overdue
     let penaltyAmount = 0;
     if (isOverdue) {
       for (const item of contract.items) {
@@ -513,7 +481,6 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       }
     }
 
-    // Determine new status
     let newStatus = contract.status;
     if (allItemsReturned) {
       newStatus = 'RETURNED';
@@ -521,35 +488,22 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       newStatus = 'PARTIALLY_RETURNED';
     }
 
-    // FIXED CALCULATION LOGIC
-    // =======================
-    // Get financial values
     const depositAmount = Number(contract.depositAmount) || 0;
     const rentalPaymentUpfront = Number(contract.rentalPaymentUpfront) || 0;
     const taxAmount = Number(contract.taxAmount) || 0;
     
-    // Calculate actual rental charges
     const actualSubtotal = isEarlyReturn && recalculateForEarlyReturn && allItemsReturned
       ? recalculatedSubtotal
       : originalSubtotal;
     
-    // Total charges = rental + tax + penalties + damage
     const totalCharges = actualSubtotal + taxAmount + penaltyAmount + totalDamageCharges;
-    
-    // Amount already paid towards rental (not deposit)
     const alreadyPaidTowardsRental = rentalPaymentUpfront;
-    
-    // Remaining rental balance (what customer still owes for rental)
     const rentalBalanceDue = Math.max(0, totalCharges - alreadyPaidTowardsRental);
     
-    // Deposit to return calculation:
-    // If rental not fully paid upfront, deduct from deposit
-    // depositRefund = deposit - unpaid rental charges
     const depositToReturn = depositReturned !== undefined 
       ? Number(depositReturned)
       : Math.max(0, depositAmount - rentalBalanceDue);
     
-    // Build return notes
     let finalReturnNotes = returnNotes || '';
     if (isEarlyReturn && allItemsReturned) {
       const savedAmount = originalSubtotal - actualSubtotal;
@@ -558,7 +512,6 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       }
     }
 
-    // Update contract
     const updated = await tx.rentalContract.update({
       where: { id: contractId },
       data: {
@@ -586,9 +539,9 @@ export const processRentalReturn = async (businessId, contractId, returnData, us
       }
     });
 
-    // Create audit log
     await tx.auditLog.create({
       data: {
+        id: uuidv4(),
         userId,
         action: 'RENTAL_RETURN',
         entityType: 'RentalContract',
@@ -654,6 +607,7 @@ export const closeRentalContract = async (businessId, contractId, userId, notes)
 
     await tx.auditLog.create({
       data: {
+        id: uuidv4(),
         userId,
         action: 'RENTAL_CLOSE',
         entityType: 'RentalContract',
@@ -689,7 +643,6 @@ export const cancelRentalContract = async (businessId, contractId, userId, reaso
   }
 
   const updatedContract = await prisma.$transaction(async (tx) => {
-    // Restore stock for all items
     for (const item of contract.items) {
       const unreturned = item.quantity - item.returnedQuantity;
       if (unreturned > 0) {
@@ -702,6 +655,7 @@ export const cancelRentalContract = async (businessId, contractId, userId, reaso
 
         await tx.stockMovement.create({
           data: {
+            id: uuidv4(),
             productId: item.productId,
             quantity: unreturned,
             previousStock: product.stockQuantity,
@@ -725,6 +679,7 @@ export const cancelRentalContract = async (businessId, contractId, userId, reaso
 
     await tx.auditLog.create({
       data: {
+        id: uuidv4(),
         userId,
         action: 'RENTAL_CLOSE',
         entityType: 'RentalContract',
@@ -756,14 +711,12 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
     ...(startDate || endDate ? { createdAt: dateFilter } : {})
   };
 
-  // Get contract counts by status
   const statusCounts = await prisma.rental_contracts.groupBy({
     by: ['status'],
     where: whereClause,
     _count: { id: true }
   });
 
-  // Get revenue totals
   const revenueTotals = await prisma.rental_contracts.aggregate({
     where: {
       ...whereClause,
@@ -782,7 +735,6 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
     _count: { id: true }
   });
 
-  // Get most rented products
   const mostRentedProducts = await prisma.rental_contract_items.groupBy({
     by: ['productId'],
     where: {
@@ -794,7 +746,6 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
     take: 10
   });
 
-  // Get product details for most rented
   const productIds = mostRentedProducts.map(p => p.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
@@ -806,7 +757,6 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
     Product: products.find(p => p.id === item.productId)
   }));
 
-  // Get overdue count
   const overdueCount = await prisma.rental_contracts.count({
     where: {
       businessId,
@@ -815,7 +765,6 @@ export const getRentalSummary = async (businessId, startDate, endDate) => {
     }
   });
 
-  // Get active rentals value
   const activeRentalsValue = await prisma.rental_contracts.aggregate({
     where: {
       businessId,

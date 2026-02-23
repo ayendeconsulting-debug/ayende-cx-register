@@ -14,8 +14,11 @@
  */
 
 import cron from 'node-cron';
+import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 
 // Configuration
 const CRM_API_URL = process.env.CRM_API_URL || 'https://ayendecx.com';
@@ -159,6 +162,7 @@ async function syncCustomersFromCRM(businessId) {
           // Create new customer from CRM (shouldn't happen often - POS creates first)
           const newCustomer = await prisma.customer.create({
             data: {
+              id: uuidv4(),
               businessId,
               externalId: crmCustomer.id,
               firstName: firstName,

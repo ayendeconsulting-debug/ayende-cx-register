@@ -9,8 +9,11 @@
  */
 
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { AppError } from '../middleware/errorHandler.js';
+import { v4 as uuidv4 } from 'uuid';
 import { fetchCustomerFromCRM } from './crmIntegrationService.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Get or create anonymous walk-in customer for a business
@@ -32,6 +35,8 @@ export const getAnonymousCustomer = async (businessId) => {
       
       anonymousCustomer = await prisma.customer.create({
         data: {
+          id: uuidv4(),
+          updatedAt: new Date(),
           businessId,
           firstName: 'Walk-In',
           lastName: 'Customer',
@@ -160,6 +165,8 @@ export const convertWalkInToRegistered = async (businessId, phoneNumber, additio
       // Create local POS record
       const newCustomer = await prisma.customer.create({
         data: {
+          id: uuidv4(),  
+          updatedAt: new Date(),  
           businessId,
           firstName: crmData.firstName || additionalData.firstName || 'Walk-In',
           lastName: crmData.lastName || additionalData.lastName || 'Customer',
@@ -192,6 +199,7 @@ export const convertWalkInToRegistered = async (businessId, phoneNumber, additio
       // Create mapping between POS and CRM
       await prisma.systemMapping.create({
         data: {
+          id: uuidv4(),
           entityType: 'CUSTOMER',
           posId: newCustomer.id,
           crmId: crmData.crmCustomerId || crmData.id,
@@ -218,6 +226,8 @@ export const convertWalkInToRegistered = async (businessId, phoneNumber, additio
     
     const newCustomer = await prisma.customer.create({
       data: {
+        id: uuidv4(),  
+        updatedAt: new Date(),
         businessId,
         firstName: additionalData.firstName || 'Walk-In',
         lastName: additionalData.lastName || 'Customer',
@@ -247,6 +257,8 @@ export const convertWalkInToRegistered = async (businessId, phoneNumber, additio
     // Queue for CRM sync
     await prisma.syncQueue.create({
       data: {
+        id: uuidv4(),
+        updatedAt: new Date(),
         businessId,
         entityType: 'customer',
         entityId: newCustomer.id,

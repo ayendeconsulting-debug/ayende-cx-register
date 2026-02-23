@@ -1,6 +1,7 @@
 // Admin route to trigger bulk customer sync
 import express from 'express';
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
@@ -58,6 +59,7 @@ router.post('/bulk-sync-customers', async (req, res) => {
       
       await prisma.syncQueue.create({
         data: {
+          id: uuidv4(),
           businessId: customer.businessId,
           entityType: 'customer',
           entityId: customer.id,

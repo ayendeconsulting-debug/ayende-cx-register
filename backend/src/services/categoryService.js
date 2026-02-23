@@ -1,4 +1,5 @@
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { AppError } from '../middleware/errorHandler.js';
 
 /**
@@ -89,6 +90,7 @@ export const createCategory = async (businessId, categoryData, userId) => {
 
   const category = await prisma.category.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       businessId,
       name: categoryData.name,
       description: categoryData.description || null,
@@ -100,6 +102,7 @@ export const createCategory = async (businessId, categoryData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'CREATE',
       entityType: 'Category',
@@ -151,6 +154,7 @@ export const updateCategory = async (businessId, id, categoryData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'UPDATE',
       entityType: 'Category',
@@ -202,6 +206,7 @@ export const deleteCategory = async (businessId, id, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'DELETE',
       entityType: 'Category',
@@ -243,6 +248,7 @@ export const reorderCategories = async (businessId, orderData, userId) => {
   // Create audit log
   await prisma.auditLog.create({
     data: {
+      id: uuidv4(),  // ✅ ADDED
       userId,
       action: 'UPDATE',
       entityType: 'Category',

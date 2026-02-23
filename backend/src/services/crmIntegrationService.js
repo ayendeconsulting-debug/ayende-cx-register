@@ -1,6 +1,7 @@
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 
 // Configuration
 const CRM_API_URL = process.env.CRM_API_URL || 'http://ayendecx.com';
@@ -106,6 +107,7 @@ const logSyncOperation = async (operation, entityType, entityId, businessId, sta
   try {
     await prisma.syncLog.create({
       data: {
+        id: uuidv4(),
         businessId,
         operation,
         direction: 'POS_TO_CRM',
