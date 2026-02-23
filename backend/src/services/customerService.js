@@ -80,6 +80,7 @@ export const createCustomer = async (businessId, customerData) => {
         customerSource: 'POS',
         syncState: 'PENDING',
         isAnonymous: false,
+        updatedAt: new Date(),  // ✅ ADDED: Required field
       },
     });
 
@@ -234,6 +235,7 @@ export const createFromWebhook = async (customerData) => {
         isActive: true,
         isAnonymous: false,
         notes: 'Customer created from CRM',
+        updatedAt: new Date(),        // ✅ ADDED: Required field
       },
     });
 
