@@ -229,6 +229,7 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
     // Create user
     const user = await tx.user.create({
       data: {
+        id: uuidv4(),
         businessId: invitation.businessId,
         email: invitation.email,
         username,
