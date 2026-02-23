@@ -122,7 +122,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
           connect: { id: customerId }
         }
       }),
-      ...(userId && { user: { connect: { id: userId } } }),
+      ...(userId && { User: { connect: { id: userId } } }),
       transactionNumber: transactionNumber, // Use generated transaction number
       subtotal: transactionData.subtotal,
       taxAmount: transactionData.taxAmount,
