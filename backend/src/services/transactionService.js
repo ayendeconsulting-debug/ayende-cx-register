@@ -153,6 +153,9 @@ export const createTransaction = async (businessId, transactionData, userId) => 
       },
     });
 
+  console.log('[DEBUG] transactionData.shiftId:', transactionData.shiftId);
+  console.log('[DEBUG] shiftId type:', typeof transactionData.shiftId);
+  
     // Update product stock
     if (enrichedItems && enrichedItems.length > 0) {
       for (const item of enrichedItems) {
