@@ -1,4 +1,5 @@
 import prisma from "../config/database.js";
+import { v4 as uuidv4 } from 'uuid';
 import { AppError } from "../middleware/errorHandler.js";
 
 /**
@@ -67,6 +68,7 @@ export const openShift = async (
   // Create new shift
   const shift = await prisma.shift.create({
     data: {
+      id: uuidv4(),
       businessId,
       userId,
       shiftNumber,

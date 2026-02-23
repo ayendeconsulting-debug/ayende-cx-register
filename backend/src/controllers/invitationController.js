@@ -4,6 +4,7 @@ import { hashPassword, generateAccessToken } from '../utils/auth.js';
 import prisma from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import { sendInvitationEmail, sendInvitationReminderEmail } from '../services/emailService.js';
 
 /**
@@ -90,6 +91,7 @@ export const inviteUser = asyncHandler(async (req, res) => {
   // Create invitation
   const invitation = await prisma.userInvitation.create({
     data: {
+      id: uuidv4(),
       businessId,
       email,
       firstName,

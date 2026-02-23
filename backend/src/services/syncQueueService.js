@@ -50,6 +50,7 @@ export const addToQueue = async ({
     const queueItem = await prisma.syncQueue.create({
       data: {
         id: uuidv4(),
+      updatedAt: new Date(),
       businessId,
         entityType,
         entityId,
