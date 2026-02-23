@@ -5,6 +5,7 @@ import { AppError } from '../middleware/errorHandler.js';
 // ============================================
 import syncQueueService from './syncQueueService.js';
 import { handleWalkInCustomer } from './walkInService.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Transaction Service - Business logic for CRM operations
@@ -71,6 +72,7 @@ export const createTransaction = async (businessId, transactionData, userId) => 
 
       // Create enriched item with all required fields
       enrichedItems.push({
+        id: uuidv4(),
         productId: product.id,
         productName: product.name,
         sku: product.sku,
