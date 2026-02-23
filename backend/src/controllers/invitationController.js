@@ -259,7 +259,7 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
       },
     });
 
-    return { user, business: invitation.business };
+    return { user, business: invitation.Business };
   });
 
   // Generate tokens for automatic login
@@ -341,8 +341,8 @@ export const getInvitationDetails = asyncHandler(async (req, res) => {
       firstName: invitation.firstName,
       lastName: invitation.lastName,
       role: invitation.role,
-      businessName: invitation.business.businessName,
-      inviterName: `${invitation.inviter.firstName} ${invitation.inviter.lastName}`,
+      businessName: invitation.Business.businessName,
+      inviterName: `${invitation.User.firstName} ${invitation.User.lastName}`,
       message: invitation.message,
       expiresAt: invitation.expiresAt,
     },
@@ -438,7 +438,7 @@ export const resendInvitation = asyncHandler(async (req, res) => {
       status: 'PENDING',
     },
     include: {
-      business: true,
+      Business: true,
     },
   });
 
