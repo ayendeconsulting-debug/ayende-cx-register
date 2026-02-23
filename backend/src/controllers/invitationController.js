@@ -238,6 +238,7 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
         lastName: invitation.lastName,
         role: invitation.role,
         isActive: true,
+        updatedAt: new Date(),
       },
       select: {
         id: true,
