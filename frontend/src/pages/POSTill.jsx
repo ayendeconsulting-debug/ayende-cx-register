@@ -725,7 +725,7 @@ const POSTill = () => {
 
               <button
                 onClick={handleCompletePayment}
-                disabled={processing || !amountPaid || parseFloat(amountPaid) < cart.total}
+                disabled={processing || !amountPaid || parseFloat(parseFloat(amountPaid).toFixed(2)) < parseFloat(cart.total.toFixed(2))}
                 className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? 'Processing...' : 'Complete Payment'}

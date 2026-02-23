@@ -48,7 +48,7 @@ const ShiftControl = () => {
   };
 
   const handleOpenShift = async () => {
-    if (!openingCash || parseFloat(openingCash) < 0) {
+    if (!openingCash || parseFloat(openingCash) <= 0) {
       toast.error('Please enter a valid opening cash amount');
       return;
     }
@@ -76,7 +76,7 @@ const ShiftControl = () => {
   };
 
   const handleCloseShift = async () => {
-    if (!closingCash || parseFloat(closingCash) < 0) {
+    if (!closingCash || parseFloat(closingCash) <= 0) {
       toast.error('Please enter a valid closing cash amount');
       return;
     }
